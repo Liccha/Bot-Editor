@@ -204,9 +204,10 @@ function uploadFile(file,onDone,onProgress){
  xhr.setRequestHeader('X-Filename',encodeURIComponent(file.name));
  xhr.setRequestHeader('X-Session',_session);
  xhr.upload.onprogress=function(e){if(e.lengthComputable&&onProgress)onProgress(Math.round(e.loaded*100/e.total))};
- xhr.onload=function(){if(xhr.status===200){var j=JSON.parse(xhr.responseText);onDone(j.token)}else{onDone(null)}};
+ xhr.onload=function(){if(xhr.status===200){try{var j=JSON.parse(xhr.responseText);onDone(j.token)}catch(ex){onDone(null)}}else{onDone(null)}};
  xhr.onerror=function(){onDone(null)};
  xhr.send(file);
+ if(onProgress)onProgress(0);
  return xhr;
 }
 var fz=document.getElementById('fileZone');
@@ -214,8 +215,8 @@ fz.addEventListener('click',function(){var i=document.createElement('input');i.t
 fz.addEventListener('dragover',function(e){e.preventDefault();fz.classList.add('drag')});
 fz.addEventListener('dragleave',function(){fz.classList.remove('drag')});
 fz.addEventListener('drop',function(e){e.preventDefault();fz.classList.remove('drag');addFiles(e.dataTransfer.files)});
-function addFiles(fl){for(var i=0;i<fl.length;i++){(function(f){var item={name:f.name,xhr:null,progress:0};_files.push(item);renderAttach();item.xhr=uploadFile(f,function(token){if(token){item.token=token;item.progress=100}else{item.error=true}item.xhr=null;renderAttach()},function(p){item.progress=p;renderAttach()})})(fl[i])}}
-function renderAttach(){var u=document.getElementById('attachList');u.innerHTML='';_files.forEach(function(f,i){var li=document.createElement('li');var bar=f.xhr?'<span style="display:inline-block;width:60px;height:6px;background:#e2e8f0;border-radius:3px;vertical-align:middle;margin-right:4px"><span style="display:inline-block;width:'+f.progress+'%;height:100%;background:#3b82f6;border-radius:3px"></span></span> '+f.progress+'%':'';li.innerHTML=(f.error?'❌ ':'')+escHtml(f.name)+' '+bar;li.onclick=function(){if(f.xhr){f.xhr.abort();f.xhr=null}_files.splice(i,1);renderAttach()};if(f.error)li.style.color='#ef4444';else if(f.xhr)li.style.color='#3b82f6';u.appendChild(li)})}
+function addFiles(fl){for(var i=0;i<fl.length;i++){(function(f){var item={name:f.name,xhr:true,progress:0};_files.push(item);item.xhr=uploadFile(f,function(token){if(token){item.token=token;item.progress=100;item.xhr=null}else{item.error=true;item.xhr=null}renderAttach()},function(p){item.progress=p;renderAttach()});renderAttach()})(fl[i])}}
+function renderAttach(){var u=document.getElementById('attachList');u.innerHTML='';_files.forEach(function(f,i){var li=document.createElement('li');var bar=f.xhr?'<progress value="'+f.progress+'" max="100" style="width:50px;height:6px;vertical-align:middle;margin-right:4px;accent-color:#3b82f6"></progress> '+f.progress+'%':'';li.innerHTML=(f.error?'❌ ':'')+escHtml(f.name)+' '+bar;li.li.onclick=function(){if(f.xhr&&f.xhr.abort){f.xhr.abort()}if(f.token){fetch(UPLOAD_API,{method:'DELETE',headers:{'X-Session':_session,'X-Filename':encodeURIComponent(f.name)}})}_files.splice(i,1);renderAttach()};if(f.error)li.style.color='#ef4444';else if(f.xhr)li.style.color='#3b82f6';u.appendChild(li)})}
 document.getElementById('fImage').addEventListener('change',function(){var f=this.files[0];if(!f)return;if(f.size>=2*1024*1024){toast('图片不能超过 2 MB！');this.value='';return}document.getElementById('imgName').textContent='0%';document.getElementById('imgName').style.color='#3b82f6';_imgXhr=uploadFile(f,function(token){_imgData=token;_imgXhr=null;document.getElementById('imgName').textContent=f.name;document.getElementById('imgName').style.color='#22c55e'},function(p){document.getElementById('imgName').textContent=p+'%'})});
 // API
 async function loadData(){var st=document.getElementById('apiStatus');try{st.textContent='⏳ 加载中...';st.style.color='#94a3b8';var r=await fetch(API);if(!r.ok)throw new Error('HTTP '+r.status);data=await r.json();if(!Array.isArray(data)){data=[];throw new Error('非数组')}st.textContent='✓ '+data.length+' 条公告';st.style.color='#22c55e'}catch(e){data=[];st.textContent='✗ '+e.message;st.style.color='#ef4444'}renderCards()}
