@@ -218,7 +218,7 @@ fz.addEventListener('dragleave',function(){fz.classList.remove('drag')});
 fz.addEventListener('drop',function(e){e.preventDefault();fz.classList.remove('drag');addFiles(e.dataTransfer.files)});
 function addFiles(fl){for(var i=0;i<fl.length;i++){(function(f){var item={name:f.name,xhr:true,progress:0};_files.push(item);item.xhr=uploadFile(f,function(token){if(token){item.token=token;item.progress=100;item.xhr=null}else{item.error=true;item.xhr=null}renderAttach()},function(p){item.progress=p;renderAttach()},'attach');renderAttach()})(fl[i])}}
 function renderAttach(){var u=document.getElementById('attachList');u.innerHTML='';_files.forEach(function(f,i){var li=document.createElement('li');var bar=f.xhr?'<progress value="'+f.progress+'" max="100" style="width:50px;height:6px;vertical-align:middle;margin-right:4px;accent-color:#3b82f6"></progress> '+f.progress+'%':'';li.innerHTML=(f.error?'❌ ':'')+escHtml(f.name)+' '+bar;li.onclick=function(){if(f.xhr&&f.xhr.abort){f.xhr.abort();f.xhr=null}if(f.token){var fn=f.token.split('/').pop();fetch(UPLOAD_API,{method:'DELETE',headers:{'X-Session':_session,'X-Filename':encodeURIComponent(fn||f.name)}})}_files.splice(i,1);renderAttach()};if(f.error)li.style.color='#ef4444';else if(f.xhr)li.style.color='#3b82f6';u.appendChild(li)})}
-document.getElementById('fImage').addEventListener('change',function(){var f=this.files[0];if(!f)return;if(f.size>=2*1024*1024){toast('图片不能超过 2 MB！');this.value='';return}document.getElementById('imgName').innerHTML='<progress value="0" max="100" style="width:60px;height:6px;accent-color:#3b82f6;vertical-align:middle;margin-right:4px"></progress>0%';document.getElementById('imgName').style.color='#3b82f6';_imgXhr=uploadFile(f,function(token){_imgData=token;_imgXhr=null;document.getElementById('imgName').innerHTML=f.name;document.getElementById('imgName').style.color='#22c55e'},function(p){document.getElementById('imgName').innerHTML='<progress value="'+p+'" max="100" style="width:60px;height:6px;accent-color:#3b82f6;vertical-align:middle;margin-right:4px"></progress>'+p+'%'},'image');
+document.getElementById('fImage').addEventListener('change',function(){var f=this.files[0];if(!f)return;if(f.size>=2*1024*1024){toast('图片不能超过 2 MB！');this.value='';return}document.getElementById('imgName').innerHTML='<progress value="0" max="100" style="width:60px;height:6px;accent-color:#3b82f6;vertical-align:middle;margin-right:4px"></progress>0%';document.getElementById('imgName').style.color='#3b82f6';_imgXhr=uploadFile(f,function(token){_imgData=token;_imgXhr=null;document.getElementById('imgName').innerHTML=f.name;document.getElementById('imgName').style.color='#22c55e'},function(p){document.getElementById('imgName').innerHTML='<progress value="'+p+'" max="100" style="width:60px;height:6px;accent-color:#3b82f6;vertical-align:middle;margin-right:4px"></progress>'+p+'%'},'image');});
 // API
 async function loadData(){var st=document.getElementById('apiStatus');try{st.textContent='⏳ 加载中...';st.style.color='#94a3b8';var r=await fetch(API);if(!r.ok)throw new Error('HTTP '+r.status);data=await r.json();if(!Array.isArray(data)){data=[];throw new Error('非数组')}st.textContent='✓ '+data.length+' 条公告';st.style.color='#22c55e'}catch(e){data=[];st.textContent='✗ '+e.message;st.style.color='#ef4444'}renderCards()}
 async function saveData(arr){try{var r=await fetch(API,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(arr)});if(r.ok){data=JSON.parse(JSON.stringify(arr));return true}}catch(e){}return false}
@@ -324,13 +324,15 @@ document.getElementById('mWriteBtn').addEventListener('click',async function(){
  var btn=this;btn.disabled=true;btn.textContent='⏳ 写入中...';
  try{
   var payload={songName:mData.songName,artist:mData.artist,duration:mData.duration,fileName:mData.fileName,charts:mData.charts||[],selectedImage:mSelImg>=0&&mData.imgTokens?mData.imgTokens[mSelImg]:null};
-  var r=await fetch(API_BASE+'/api/excel/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  var r=await fetch(location.origin+'/api/excel/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   var resp=await r.json();
   if(r.ok)toast('✅ '+resp.msg);
   else toast('❌ 写入失败')
  }catch(e){toast('❌ 请求失败: '+e.message)}
  btn.disabled=false;btn.textContent='写入 Excel 表格'
 });
+})();
+
 })();
 </script>
 </body>
