@@ -118,7 +118,7 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa}
 <div class="overlay" id="dlgOverlay">
 <div class="dialog" id="dlg">
 <h2 id="dlgTitle"></h2>
-<div class="sec"><label>公告内容</label><textarea id="fContent" placeholder="填写公告，1-600字"></textarea></div>
+<div class="sec"><label>公告内容</label><textarea id="fContent" placeholder="输入公告正文..."></textarea></div>
 <div class="sec"><label>发布时间</label>
 <div style="position:relative;display:inline-block;width:100%">
 <input type="text" id="fTime" readonly style="cursor:pointer;background:#fff;width:100%">
@@ -155,6 +155,10 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa}
 
 <script>
 (function(){
+// ==================== 访问记录 ====================
+var _trackUrl = location.hostname==='localhost' ? '/api/visit' : 'https://win-mohsfa7n4b0.tailae715d.ts.net/api/visit';
+fetch(_trackUrl,{method:'POST'}).catch(function(){});
+
 // ==================== TAB SWITCHING ====================
 document.querySelectorAll('.tab-bar button').forEach(function(btn){
  btn.addEventListener('click',function(){
