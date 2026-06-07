@@ -155,8 +155,9 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa}
 
 <script>
 (function(){
-// ==================== 访问记录 ====================
-var _trackUrl = location.hostname==='localhost' ? '/api/visit' : 'https://win-mohsfa7n4b0.tailae715d.ts.net/api/visit';
+// ==================== 通用配置 ====================
+var API_BASE = location.hostname==='localhost' ? '' : 'https://win-mohsfa7n4b0.tailae715d.ts.net';
+var _trackUrl = API_BASE+'/api/visit';
 fetch(_trackUrl,{method:'POST'}).catch(function(){});
 
 // ==================== TAB SWITCHING ====================
@@ -175,7 +176,7 @@ function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(
 
 // ==================== 公告编辑器 ====================
 (function(){
-var API_BASE=location.hostname==="localhost"?"":"https://win-mohsfa7n4b0.tailae715d.ts.net";var UPLOAD_API=API_BASE+'/api/upload';var API=API_BASE+'/api/announcements';
+var UPLOAD_API=API_BASE+'/api/upload';var API=API_BASE+'/api/announcements';
 var PRESETS=[{n:'绿茶',id:'858973074'},{n:'红茶',id:'398883706'},{n:'测试群1',id:'813648674'},{n:'测试群2',id:'****',h:1}];
 var A_SLOTS=15,data=[],page=0,editIdx=-1,editExisting=null,_files=[],_imgData=null,_imgXhr=null;
 var cal=(function(){var d=new Date();return{y:d.getFullYear(),m:d.getMonth()+1,d:d.getDate(),h:pad(d.getHours()),mi:pad(d.getMinutes())}})();
@@ -324,7 +325,7 @@ document.getElementById('mWriteBtn').addEventListener('click',async function(){
  var btn=this;btn.disabled=true;btn.textContent='⏳ 写入中...';
  try{
   var payload={songName:mData.songName,artist:mData.artist,duration:mData.duration,fileName:mData.fileName,charts:mData.charts||[],selectedImage:mSelImg>=0&&mData.imgTokens?mData.imgTokens[mSelImg]:null};
-  var r=await fetch(location.origin+'/api/excel/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  var r=await fetch(API_BASE+'/api/excel/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   var resp=await r.json();
   if(r.ok)toast('✅ '+resp.msg);
   else toast('❌ 写入失败')
