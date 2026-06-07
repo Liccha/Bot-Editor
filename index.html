@@ -12,8 +12,8 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa}
 .tab-bar button{padding:12px 24px;border:none;background:none;font-size:14px;font-family:inherit;cursor:pointer;color:#64748b;border-bottom:2px solid transparent;transition:all .15s}
 .tab-bar button:hover{color:#1e293b}
 .tab-bar button.active{color:#3b82f6;border-bottom-color:#3b82f6;font-weight:600}
-.tab-content{display:none;height:calc(100% - 49px);overflow-y:auto}
-.tab-content.active{display:flex;flex-direction:column}
+.tab-content{display:none;height:calc(100% - 49px);overflow-y:auto;position:absolute;top:49px;left:0;right:0;bottom:0}
+.tab-content.active{display:flex;flex-direction:column;position:relative;top:auto}
 /* --- 公告编辑器样式 --- */
 .a-app{width:100%;max-width:960px;display:flex;flex-direction:column;min-height:100%;padding:24px 20px;margin:0 auto}
 .a-app h1{text-align:center;color:#1e293b;font-size:22px;margin-bottom:20px;letter-spacing:1px}
@@ -135,10 +135,9 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa}
 
 <!-- ==================== 谱面处理 ==================== -->
 <div class="tab-content" id="tabMcz">
-<div class="m-layout">
-<div class="m-main">
-<p id="mNoData" style="color:#94a3b8;text-align:center;padding:60px 0">📦 拖拽 .mcz 文件到此处或点击选择<br><input type="file" id="mInput" accept=".mcz" style="display:none"><button class="btn primary" style="margin-top:12px" onclick="document.getElementById('mInput').click()">选择 MCZ 文件</button></p>
-<div id="mResult" style="display:none">
+<div class="m-drop" id="mDrop" style="margin:20px">📦 拖拽 .mcz 文件到此处<br><small style="font-size:11px">或点击选择文件</small></div>
+<input type="file" id="mInput" accept=".mcz" style="display:none">
+<div id="mResult" style="display:none;flex:1;overflow-y:auto;padding:20px">
 <!-- 歌曲信息胶囊 -->
 <div id="mInfoCapsules" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
 <!-- 封面图库 -->
@@ -149,8 +148,6 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa}
 <div id="mCharts" style="display:none"><div id="mMatrixTitle" style="font-size:13px;font-weight:700;color:#1e293b;padding:8px 12px;background:#ede9fe;border:1px solid #c4b5fd;border-radius:10px 10px 0 0">谱面难度矩阵</div><div id="matrixGrid" style="padding:10px;background:#f8f7ff;border:1px solid #c4b5fd;border-top:none;border-radius:0 0 10px 10px"></div></div>
 <!-- 写入按钮 -->
 <div style="margin-top:16px;display:flex;gap:10px" id="mBtnRow" hidden><button class="btn primary" id="mWriteBtn">写入 Excel 表格</button></div>
-</div>
-</div>
 </div>
 </div>
 
@@ -175,8 +172,7 @@ function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(
 // ==================== 公告编辑器 ====================
 (function(){
 //API_BASE部署时改这里
-var API_BASE=location.hostname==="localhost"?"":"https://win-mohsfa7n4b0.tailae715d.ts.net"
-;var API=API_BASE+'/api/announcements';
+var API_BASE=location.hostname==="localhost"?"":"https://win-mohsfa7n4b0.tailae715d.ts.net";var API=API_BASE+'/api/announcements';
 var PRESETS=[{n:'绿茶',id:'858973074'},{n:'红茶',id:'398883706'},{n:'测试群1',id:'813648674'},{n:'测试群2',id:'****',h:1}];
 var A_SLOTS=15,data=[],page=0,editIdx=-1,editExisting=null,_files=[],_imgData=null;
 var cal={y:2026,m:6,d:6,h:'20',mi:'00'};
@@ -223,16 +219,20 @@ loadData();
 // ==================== MCZ 谱面处理 ====================
 (function(){
 var MAPI=API_BASE+'/api/mcz/parse',mData=null,mSelImg=-1,mAudio=null,mPlayState=0;
-var fi=document.getElementById('mInput'),mNoData=document.getElementById('mNoData');
+var fi=document.getElementById("mInput"),mDrop=document.getElementById("mDrop");
 
 // Drag on entire tab area
-document.getElementById('tabMcz').addEventListener('dragover',function(e){e.preventDefault()});
-document.getElementById('tabMcz').addEventListener('drop',function(e){e.preventDefault();if(e.dataTransfer.files[0])handleMcz(e.dataTransfer.files[0])});
+mDrop.addEventListener("click",function(){fi.click()});
+mDrop.addEventListener("dragover",function(e){e.preventDefault();mDrop.classList.add("drag")});
+mDrop.addEventListener("dragleave",function(){mDrop.classList.remove("drag")});
+mDrop.addEventListener("drop",function(e){e.preventDefault();mDrop.classList.remove("drag");if(e.dataTransfer.files[0])handleMcz(e.dataTransfer.files[0])});
+document.body.addEventListener('dragover',function(e){if(document.getElementById('tabMcz').classList.contains('active'))e.preventDefault()});
+document.body.addEventListener('drop',function(e){if(document.getElementById('tabMcz').classList.contains('active')){e.preventDefault();if(e.dataTransfer.files[0])handleMcz(e.dataTransfer.files[0])}});
 fi.addEventListener('change',function(){if(this.files[0])handleMcz(this.files[0])});
 
 async function handleMcz(file){
  if(!file.name.toLowerCase().endsWith('.mcz')){toast('请选择 .mcz 文件！');return}
- mNoData.innerHTML='<span style="color:#3b82f6">⏳ 正在解析 ' + escHtml(file.name) + ' ...</span>';
+ mDrop.innerHTML='<span style="color:#3b82f6">⏳ 正在解析 ' + escHtml(file.name) + ' ...</span>';
  try{
   var buf=await file.arrayBuffer();
   var r=await fetch(MAPI,{method:'POST',headers:{'X-Filename':encodeURIComponent(file.name)},body:buf});
@@ -242,7 +242,7 @@ async function handleMcz(file){
 }
 
 function renderMcz(){
- var d=mData;mNoData.style.display='none';document.getElementById('mResult').style.display='block';document.getElementById('mCharts').style.display='block';document.getElementById('mBtnRow').hidden=false;
+ var d=mData;mDrop.style.display='none';document.getElementById('mResult').style.display='block';document.getElementById('mCharts').style.display='block';document.getElementById('mBtnRow').hidden=false;
  // info capsules
  var caps=document.getElementById('mInfoCapsules'),charterSet={};
  (d.charts||[]).forEach(function(c){if(c.charter)charterSet[c.charter]=true});
