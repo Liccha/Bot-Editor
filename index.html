@@ -91,14 +91,17 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 .lib-search{width:100%;max-width:740px;padding:10px 16px;border:2px solid #cbd5e1;border-radius:12px;font-size:14px;font-family:inherit;outline:none;margin-bottom:16px;display:block;margin-left:auto;margin-right:auto}
 .lib-search:focus{border-color:#3b82f6}
 .lib-grid{display:flex;flex-direction:column;gap:8px}
-.lib-card{position:relative;background:rgba(255,255,255,0.85);border-radius:60px 0px 60px 60px;border:1px solid #e2e8f0;padding:0;display:block;cursor:pointer;transition:all .15s;min-height:110px}
+.lib-card{position:relative;background:rgba(255, 255, 255, 0.85);border-radius:60px 12px 60px 60px;border:1px solid #e2e8f0;padding:0;display:block;cursor:pointer;transition:all .15s;min-height:110px}
 .lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}
-.lib-card .cv{position:absolute;left:-18px;top:-7px;width:120px;height:120px;object-fit:cover;border-radius:50%;border:4px solid #2842a9;box-shadow:0 0 0 2px rgba(59,130,246,.15);flex-shrink:0}
-.lib-card .na{position:absolute;left:121px;top:14px;font-family:'演示斜黑体';font-size:18px;color:#000000;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lib-card .ar{position:absolute;left:122px;top:42px;font-family:'演示斜黑体';font-size:11px;color:#000000;font-weight:300;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lib-card .bp{position:absolute;left:121px;top:79px;font-family:'方正粗圆简体';font-size:14px;color:#000000;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lib-card .du{position:absolute;left:207px;top:79px;font-family:'方正粗圆简体';font-size:14px;color:#000000;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lib-card .ta{position:absolute;left:387px;top:16px;font-family:inherit;font-size:15px;color:#1e40af;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#dbeafe;padding:1px 6px;border-radius:4px}
+.lib-grid{gap:18px}
+.lib-card .cv{position:absolute;left:-18px;top:-7px;width:120px;height:120px;object-fit:cover;border-radius:50%;border:4px solid rgb(69, 93, 217);box-shadow:rgba(59, 130, 246, 0.15) 0px 0px 0px 2px;flex-shrink:0}
+.lib-card .na{position:absolute;left:122px;top:15px;font-family:'演示斜黑体';font-size:18px;color:rgb(0, 0, 0);font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .ar{position:absolute;left:122px;top:42px;font-family:'演示斜黑体';font-size:11px;color:rgb(0, 0, 0);font-weight:300;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .bp{position:absolute;left:121px;top:82px;font-family:'方正粗圆简体';font-size:14px;color:rgb(255, 255, 255);font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .du{position:absolute;left:214px;top:82px;font-family:'方正粗圆简体';font-size:14px;color:rgb(255, 255, 255);font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .ch{position:absolute;left:250px;top:55px;font-family:inherit;font-size:10px;color:rgb(148, 163, 184);font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:none}
+.lib-card .ta{position:absolute;left:393px;top:16px;font-family:inherit;font-size:14px;color:rgb(30, 64, 175);font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#dbeafe;padding:1px 6px;border-radius:4px}
+.lib-card .ta span{font-family:inherit;font-size:14px;color:#1e40af}
 
 .lib-stats{text-align:center;color:#64748b;font-size:13px;margin-bottom:12px}
 .lib-detail{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.5);z-index:1000;justify-content:center;align-items:flex-start;padding-top:32px;overflow-y:auto}
@@ -371,7 +374,7 @@ function showSongDetail(idx){
 }
 document.getElementById("libDetail").addEventListener("click",function(e){if(e.target===this)this.classList.remove("show")});
 
-	// ==================== 卡片设计器 (WYSIWYG v2) ====================
+	// ==================== 卡片设计器 (WYSIWYG v3) ====================
 	// 仅 localhost 显示设计 tab
 	if(location.hostname!=="localhost"){(function(){
 		var b=document.querySelector('[data-tab="design"]');if(b)b.style.display="none";
@@ -435,6 +438,17 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 				+";border-radius:"+_ds.card.brTL+"px "+_ds.card.brTR+"px "+_ds.card.brBR+"px "+_ds.card.brBL+"px";
 		}
 
+		// Ensure shape has proper defaults
+		function normShape(sh){
+			if(!sh.type)sh.type="rect";
+			if(!sh.vertices||!sh.vertices.length){
+				if(sh.type==="polygon")sh.vertices=[{x:0,y:0},{x:1,y:0},{x:0.5,y:1}];
+				else sh.vertices=[];
+			}
+			if(sh.type==="circle")sh.w=sh.h=Math.max(sh.w||60,sh.h||60);
+			return sh;
+		}
+
 		function buildPreview(){
 			card.style.cssText=cardCSS();
 			card.innerHTML="";
@@ -444,14 +458,11 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 				h.addEventListener("mousedown",function(e){startDrag(e,"corner_"+c)});
 				card.appendChild(h);
 			});
-			// Shapes (background layer first)
+			// Shapes
 			(_ds.shapes||[]).forEach(function(sh,i){
-				var z=sh.zIndex||0;if(z>0)return; // render positive z later
-				var d=document.createElement("div");d.className="ds-el ds-shape";d.dataset.el="shape_"+i;
-				d.style.cssText="left:"+sh.x+"px;top:"+sh.y+"px;width:"+sh.w+"px;height:"+sh.h+"px;background:"+(sh.color||"#e2e8f0")+";opacity:"+(sh.opacity||1)+";z-index:"+z;
-				if(sh.type==="circle")d.style.cssText+=";border-radius:50%";else if(sh.radius)d.style.cssText+=";border-radius:"+sh.radius+"px";
-				d.addEventListener("mousedown",function(e){e.stopPropagation();selectEl("shape_"+i);startDrag(e,"move_shape")});
-				card.appendChild(d);
+				normShape(sh);
+				if((sh.zIndex||0)>0)return; // bg layer first
+				renderShape(sh,i);
 			});
 			// Cover
 			if(_ds.cover.visible!==false){
@@ -466,14 +477,10 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 				w.addEventListener("mousedown",function(e){if(e.target===img||e.target===w){selectEl("cover");startDrag(e,"move_cover")}});
 				card.appendChild(w);
 			}
-			// Shapes (foreground layer)
+			// Shapes (foreground)
 			(_ds.shapes||[]).forEach(function(sh,i){
 				if((sh.zIndex||0)<=0)return;
-				var d=document.createElement("div");d.className="ds-el ds-shape";d.dataset.el="shape_"+i;
-				d.style.cssText="left:"+sh.x+"px;top:"+sh.y+"px;width:"+sh.w+"px;height:"+sh.h+"px;background:"+(sh.color||"#e2e8f0")+";opacity:"+(sh.opacity||1)+";z-index:"+sh.zIndex;
-				if(sh.type==="circle")d.style.cssText+=";border-radius:50%";else if(sh.radius)d.style.cssText+=";border-radius:"+sh.radius+"px";
-				d.addEventListener("mousedown",function(e){e.stopPropagation();selectEl("shape_"+i);startDrag(e,"move_shape")});
-				card.appendChild(d);
+				renderShape(sh,i);
 			});
 			// Text elements
 			["name","artist","bpm","duration","charters","tags"].forEach(function(t){
@@ -482,24 +489,61 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 				var prefix=_ds[t].prefix||"",suffix=_ds[t].suffix||"";
 				var sample={name:"踏上旅途 (Take the Journey)",artist:"HOYO-MiX",bpm:"128",duration:"02:14",charters:"谱师A, 谱师B",tags:""}[t];
 				el.style.cssText="left:"+_ds[t].x+"px;top:"+_ds[t].y+"px;font-family:"+(_ds[t].font==="默认"?"inherit":_ds[t].font)+";font-size:"+_ds[t].size+"px;color:"+_ds[t].color+";font-weight:"+(_ds[t].weight||"normal");
-				if(t==="tags"){
-					el.style.cssText+=";background:"+(_ds[t].bg||"#dbeafe")+";padding:1px 6px;border-radius:4px";
-				}
-				if(t==="tags"){
-					var tf=_ds[t].tagFont==="默认"?"inherit":_ds[t].tagFont;
-					el.textContent="4K 5K";
-				}else{
-					el.textContent=prefix+sample+suffix;
-				}
+				if(t==="tags")el.style.cssText+=";background:"+(_ds[t].bg||"#dbeafe")+";padding:1px 6px;border-radius:4px";
+				el.textContent=t==="tags"?"4K 5K":prefix+sample+suffix;
 				el.addEventListener("mousedown",function(e){e.stopPropagation();selectEl(t);startDrag(e,"move_el")});
 				card.appendChild(el);
 			});
-			card.addEventListener("mousedown",function(e){if(e.target===card||e.target.classList.contains("ds-corner-handle"))selectEl(null)});
+			card.addEventListener("mousedown",function(e){
+				if(e.target===card||e.target.classList.contains("ds-corner-handle"))selectEl(null);
+			});
+		}
+
+		function renderShape(sh,i){
+			var d=document.createElement("div");d.className="ds-shape";d.dataset.el="shape_"+i;
+			d.style.cssText="position:absolute;left:"+sh.x+"px;top:"+sh.y+"px;width:"+sh.w+"px;height:"+sh.h+"px;background:"+(sh.color||"#e2e8f0")+";opacity:"+(sh.opacity||1)+";z-index:"+(sh.zIndex||0);
+			if(sh.type==="circle"){d.style.cssText+=";border-radius:50%"}
+			else if(sh.type==="rect"){if(sh.radius)d.style.cssText+=";border-radius:"+sh.radius+"px"}
+			else if(sh.type==="polygon"&&sh.vertices&&sh.vertices.length>=3){
+				var pts=sh.vertices.map(function(v){return Math.round(v.x*sh.w)+"px "+Math.round(v.y*sh.h)+"px"}).join(",");
+				d.style.cssText+=";clip-path:polygon("+pts+")";
+			}
+			d.addEventListener("mousedown",function(e){e.stopPropagation();selectEl("shape_"+i);
+				if(e.target.classList.contains("ds-vtx"))return;
+				startDrag(e,"move_shape");
+			});
+			card.appendChild(d);
+			// Vertex handles for polygon
+			if(sh.type==="polygon"&&sh.vertices){
+				// Vertex dots
+				sh.vertices.forEach(function(v,vi){
+					var vh=document.createElement("div");vh.className="ds-vtx";
+					vh.style.cssText="position:absolute;width:8px;height:8px;background:#f59e0b;border:1.5px solid #fff;border-radius:50%;z-index:25;cursor:grab;left:"+(Math.round(v.x*sh.w)-4)+"px;top:"+(Math.round(v.y*sh.h)-4)+"px";
+					vh.addEventListener("mousedown",function(e){e.stopPropagation();selectEl("shape_"+i);startDrag(e,"move_vertex_"+i+"_"+vi)});
+					d.appendChild(vh);
+				});
+				// Midpoint dots (lighter, for adding vertices)
+				for(var vi=0;vi<sh.vertices.length;vi++){
+					var v1=sh.vertices[vi],v2=sh.vertices[(vi+1)%sh.vertices.length];
+					var mx=(v1.x+v2.x)/2,my=(v1.y+v2.y)/2;
+					var mh=document.createElement("div");mh.className="ds-mid";
+					mh.style.cssText="position:absolute;width:5px;height:5px;background:#94a3b8;border:1px solid #fff;border-radius:50%;z-index:24;cursor:pointer;left:"+(Math.round(mx*sh.w)-2)+"px;top:"+(Math.round(my*sh.h)-2)+"px";
+					mh.addEventListener("mousedown",function(e){e.stopPropagation();
+						sh.vertices.splice(vi+1,0,{x:mx,y:my});selectEl("shape_"+i);buildPreview();
+					});
+					d.appendChild(mh);
+				}
+			}else{
+				// Non-polygon: corner resize handles
+				["nw","ne","sw","se"].forEach(function(p){
+					var rh=document.createElement("div");rh.className="ds-resize-handle "+p;d.appendChild(rh);
+				});
+			}
 		}
 
 		function selectEl(name){
 			_dsSel=name;
-			card.querySelectorAll(".ds-el,.ds-el-cover,.ds-shape").forEach(function(el){el.classList.remove("selected")});
+			card.querySelectorAll(".ds-el,.ds-el-cover,.ds-shape,.ds-vtx").forEach(function(el){el.classList.remove("selected")});
 			if(name&&name.startsWith("shape_")){
 				var idx=parseInt(name.split("_")[1]);
 				card.querySelectorAll(".ds-shape").forEach(function(el,i){if(i===idx)el.classList.add("selected")});
@@ -514,12 +558,12 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 				h+='<div class="el-row'+(it.id===_dsSel?' sel':'')+'" data-el="'+it.id+'"><div class="dot" style="background:'+it.color+'"></div> '+it.label+' '+(it.id==="cover"?"":'<span style="font-size:9px;color:#94a3b8">'+(it.id==="name"?_ds[it.id].font+" "+_ds[it.id].size+"px":_ds[it.id].visible===false?"隐藏":"✓")+'</span>')+'</div>';
 			});
 			(_ds.shapes||[]).forEach(function(sh,i){
-				h+='<div class="el-row'+("shape_"+i===_dsSel?' sel':'')+'" data-el="shape_'+i+'"><div class="dot" style="background:'+(sh.color||"#e2e8f0")+'"></div> 图形'+(i+1)+' <span style="font-size:9px;color:#94a3b8">'+(sh.type||"rect")+'</span></div>';
+				h+='<div class="el-row'+("shape_"+i===_dsSel?' sel':'')+'" data-el="shape_'+i+'"><div class="dot" style="background:'+(sh.color||"#e2e8f0")+'"></div> 图形'+(i+1)+' <span style="font-size:9px;color:#94a3b8">'+(sh.type||"rect")+(sh.type==="polygon"?"("+sh.vertices.length+"点)":"")+'</span></div>';
 			});
-			h+='<div class="el-row" style="color:#3b82f6" data-el="new_shape">+ 新增图形</div>';
+			h+='<div class="el-row" style="color:#3b82f6;cursor:pointer" data-el="new_shape">+ 新增图形</div>';
 			elList.innerHTML=h;
 			elList.querySelectorAll(".el-row").forEach(function(r){r.addEventListener("click",function(){
-				if(this.dataset.el==="new_shape"){_ds.shapes.push({type:"rect",x:10,y:10,w:60,h:40,color:"#e2e8f0",opacity:1,zIndex:0,radius:4});selectEl("shape_"+(+_ds.shapes.length-1))}
+				if(this.dataset.el==="new_shape"){_ds.shapes.push({type:"rect",x:10,y:10,w:80,h:60,color:"#cbd5e1",opacity:1,zIndex:0,radius:0,vertices:[]});selectEl("shape_"+(+_ds.shapes.length-1))}
 				else selectEl(this.dataset.el||null);
 			})});
 		}
@@ -539,16 +583,24 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 					+pr("圆角%","cover.radius",0,50)+pr("边框粗细","cover.ringW",0,10)
 					+pc("边框颜色","cover.ringColor")+pi("光晕CSS","cover.shadow");
 			}else if(n&&n.startsWith("shape_")){
-				var idx=parseInt(n.split("_")[1]);var sh=_ds.shapes[idx];if(!sh)return;
+				var idx=parseInt(n.split("_")[1]);var sh=_ds.shapes[idx];if(!sh)return;normShape(sh);
 				props.innerHTML="<h3>图形"+(idx+1)+" 属性</h3>"
-					+ps3("形状类型","shape_type_"+idx,[["rect","矩形"],["circle","圆形"]],sh.type||"rect")
-					+pr2("X位置","shape_x_"+idx,-100,800,sh.x)+pr2("Y位置","shape_y_"+idx,-100,400,sh.y)
-					+pr2("宽度","shape_w_"+idx,10,400,sh.w)+pr2("高度","shape_h_"+idx,10,400,sh.h)
+					+ps3("形状类型","shape_type_"+idx,[["rect","矩形"],["circle","圆形"],["polygon","多边形"]],sh.type||"rect")
+					+pn("X位置","shape_x_"+idx,sh.x)+pn("Y位置","shape_y_"+idx,sh.y)
+					+pn(sh.type==="circle"?"直径":"宽度","shape_w_"+idx,sh.w)
+					+(sh.type==="circle"?"":pn("高度","shape_h_"+idx,sh.h))
 					+pc2("填充色","shape_color_"+idx,sh.color||"#e2e8f0")
 					+pr2("透明度","shape_opacity_"+idx,0,100,Math.round((sh.opacity||1)*100))
-					+pr2("圆角","shape_radius_"+idx,0,200,sh.radius||0)
-					+pr2("层级","shape_z_"+idx,-5,20,sh.zIndex||0)
-					+'<div class="ds-prop"><button class="btn secondary" id="dsDelShape" style="width:100%;font-size:11px;padding:4px">删除此图形</button></div>';
+					+(sh.type==="rect"?pr2("圆角","shape_radius_"+idx,0,200,sh.radius||0):"")
+					+pr2("层级","shape_z_"+idx,-5,20,sh.zIndex||0);
+				if(sh.type==="polygon"&&sh.vertices){
+					props.innerHTML+='<div class="ds-prop"><label>顶点 ('+sh.vertices.length+')</label></div>';
+					sh.vertices.forEach(function(v,vi){
+						props.innerHTML+='<div class="ds-prop"><div class="row" style="gap:4px;margin:1px 0"><span style="font-size:9px;color:#94a3b8;width:20px">#'+(vi+1)+'</span><input type="number" data-sid="shape_vx_'+idx+'_'+vi+'" value="'+Math.round(v.x*100)+'" style="width:45px;font-size:10px" title="X%"><input type="number" data-sid="shape_vy_'+idx+'_'+vi+'" value="'+Math.round(v.y*100)+'" style="width:45px;font-size:10px" title="Y%"><button class="btn secondary" data-sid="shape_delv_'+idx+'_'+vi+'" style="padding:1px 5px;font-size:9px">×</button></div></div>';
+					});
+					props.innerHTML+='<div class="ds-prop"><button class="btn secondary" data-sid="shape_addv_'+idx+'" style="width:100%;font-size:11px;padding:3px">+ 添加顶点</button></div>';
+				}
+				props.innerHTML+='<div class="ds-prop"><button class="btn secondary" id="dsDelShape" style="width:100%;font-size:11px;padding:4px">删除此图形</button></div>';
 			}else{
 				var labels={name:"歌曲名",artist:"作者",bpm:"BPM",duration:"时长",charters:"谱师",tags:"标签"};
 				props.innerHTML="<h3>"+labels[n]+" 属性</h3>"
@@ -566,6 +618,7 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 
 		function pr(label,id,min,max){var path="_ds."+id,v=getVal(path),vid=id.replace(/\./g,"_");return '<div class="ds-prop"><label>'+label+' <span class="val" id="dsv_'+vid+'">'+v+'</span></label><input type="range" data-path="'+path+'" min="'+min+'" max="'+max+'" value="'+v+'"></div>'}
 		function pr2(label,id,min,max,val){return '<div class="ds-prop"><label>'+label+' <span class="val" id="dsv_'+id+'">'+val+'</span></label><input type="range" data-sid="'+id+'" min="'+min+'" max="'+max+'" value="'+val+'"></div>'}
+		function pn(label,id,val){return '<div class="ds-prop"><div class="row"><label style="flex:1">'+label+'</label><input type="number" data-sid="'+id+'" value="'+val+'" style="width:60px;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;padding:1px 4px;text-align:right"></div></div>'}
 		function pc(label,id){return '<div class="ds-prop"><div class="row"><label style="flex:1">'+label+'</label><input type="color" data-path="_ds.'+id+'" value="'+getVal("_ds."+id)+'"></div></div>'}
 		function pc2(label,id,val){return '<div class="ds-prop"><div class="row"><label style="flex:1">'+label+'</label><input type="color" data-sid="'+id+'" value="'+val+'"></div></div>'}
 		function pi(label,id){return '<div class="ds-prop"><label>'+label+'</label><input type="text" data-path="_ds.'+id+'" value="'+String(getVal("_ds."+id)).replace(/"/g,"&quot;")+'" style="width:100%;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;padding:2px 4px"></div>'}
@@ -585,6 +638,9 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 					el.addEventListener("input",function(){handleShapeProp(sid,parseInt(this.value));buildPreview()});
 				}
 			});
+			props.querySelectorAll("input[type=number]").forEach(function(el){
+				el.addEventListener("input",function(){handleShapeProp(this.dataset.sid,parseInt(this.value)||0);buildPreview()});
+			});
 			props.querySelectorAll("input[type=color]").forEach(function(el){
 				if(el.dataset.path)el.addEventListener("input",function(){setVal(this.dataset.path,this.value);buildPreview()});
 				else if(el.dataset.sid)el.addEventListener("input",function(){handleShapeProp(this.dataset.sid,this.value);buildPreview()});
@@ -602,14 +658,49 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 			var db=document.getElementById("dsDelShape");if(db)db.addEventListener("click",function(){
 				var m=_dsSel.match(/^shape_(\d+)$/);if(m){_ds.shapes.splice(parseInt(m[1]),1);selectEl(null)}
 			});
+			// Vertex delete buttons
+			props.querySelectorAll("button[data-sid*='shape_delv']").forEach(function(btn){
+				btn.addEventListener("click",function(){
+					var m=this.dataset.sid.match(/^shape_delv_(\d+)_(\d+)$/);if(!m)return;
+					var si=parseInt(m[1]),vi=parseInt(m[2]);
+					if(_ds.shapes[si]&&_ds.shapes[si].vertices.length>3){_ds.shapes[si].vertices.splice(vi,1);buildPreview();buildProps()}
+				});
+			});
+			// Vertex add button
+			props.querySelectorAll("button[data-sid*='shape_addv']").forEach(function(btn){
+				btn.addEventListener("click",function(){
+					var m=this.dataset.sid.match(/^shape_addv_(\d+)$/);if(!m)return;
+					var si=parseInt(m[1]),sh=_ds.shapes[si];if(!sh)return;
+					var vs=sh.vertices;if(vs.length<2)return;
+					// Find longest edge and add vertex at midpoint
+					var maxD=0,mi=0;
+					for(var i=0;i<vs.length;i++){var a=vs[i],b=vs[(i+1)%vs.length];var d=Math.pow(b.x-a.x,2)+Math.pow(b.y-a.y,2);if(d>maxD){maxD=d;mi=i}}
+					var a=vs[mi],b=vs[(mi+1)%vs.length];
+					vs.splice(mi+1,0,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+					buildPreview();buildProps();
+				});
+			});
 		}
 
 		function handleShapeProp(sid,val){
 			var m=sid.match(/^shape_(.+)_(\d+)$/);if(!m)return;
+			// Handle vertex sub-properties: shape_vx_0_1
+			var m2=sid.match(/^shape_v([xy])_(\d+)_(\d+)$/);
+			if(m2){
+				var si=parseInt(m2[2]),vi=parseInt(m2[3]);
+				if(_ds.shapes[si]&&_ds.shapes[si].vertices&&_ds.shapes[si].vertices[vi]){
+					_ds.shapes[si].vertices[vi][m2[1]]=val/100;
+				}
+				return;
+			}
 			var key=m[1],idx=parseInt(m[2]);if(!_ds.shapes[idx])return;
-			if(key==="opacity")_ds.shapes[idx][key]=val/100;
-			else if(key==="x"||key==="y"||key==="w"||key==="h"||key==="z"||key==="radius")_ds.shapes[idx][key]=parseInt(val);
-			else _ds.shapes[idx][key]=val;
+			var sh=_ds.shapes[idx];
+			if(key==="opacity")sh[key]=val/100;
+			else if(key==="x"||key==="y"||key==="w"||key==="h"||key==="z"||key==="radius")sh[key]=key==="w"||key==="h"?Math.max(1,parseInt(val)||0):parseInt(val)||0;
+			else sh[key]=val;
+			if(key==="type"&&val==="circle"){sh.h=sh.w;sh.vertices=[]}
+			if(key==="type"&&val==="polygon"&&(!sh.vertices||sh.vertices.length<3)){sh.vertices=[{x:0,y:0},{x:1,y:0},{x:0.5,y:1}]}
+			if(key==="type"&&val!=="polygon")sh.vertices=[];
 		}
 
 		function startDrag(e,type){
@@ -618,8 +709,13 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 			else if(type==="move_cover"){_dsOrig.x=_ds.cover.x;_dsOrig.y=_ds.cover.y}
 			else if(type==="move_shape"&&_dsSel){
 				var m=_dsSel.match(/^shape_(\d+)$/);if(m){var sh=_ds.shapes[parseInt(m[1])];_dsOrig.x=sh.x;_dsOrig.y=sh.y}
-			}
-			else if(type.startsWith("corner_")){var c=type.split("_")[1];["TL","TR","BL","BR"].forEach(function(x){_dsOrig["br"+x]=_ds.card["br"+x]})}
+			}else if(type.startsWith("move_vertex_")){
+				var p=type.split("_");var si=parseInt(p[2]),vi=parseInt(p[3]);
+				if(_ds.shapes[si]&&_ds.shapes[si].vertices&&_ds.shapes[si].vertices[vi]){
+					_dsOrig.vx=_ds.shapes[si].vertices[vi].x;
+					_dsOrig.vy=_ds.shapes[si].vertices[vi].y;
+				}
+			}else if(type.startsWith("corner_")){var c=type.split("_")[1];["TL","TR","BL","BR"].forEach(function(x){_dsOrig["br"+x]=_ds.card["br"+x]})}
 		}
 
 		document.addEventListener("mousemove",function(e){
@@ -627,7 +723,15 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 			var dx=e.clientX-_dsStartX,dy=e.clientY-_dsStartY;
 			if(_dsDragType==="move_el"){setVal("_ds."+_dsSel+".x",Math.round(_dsOrig.x+dx));setVal("_ds."+_dsSel+".y",Math.round(_dsOrig.y+dy))}
 			else if(_dsDragType==="move_cover"){_ds.cover.x=Math.round(_dsOrig.x+dx);_ds.cover.y=Math.round(_dsOrig.y+dy)}
-			else if(_dsDragType==="move_shape"){var m=_dsSel.match(/^shape_(\d+)$/);if(m){_ds.shapes[parseInt(m[1])].x=Math.round(_dsOrig.x+dx);_ds.shapes[parseInt(m[1])].y=Math.round(_dsOrig.y+dy)}}
+			else if(_dsDragType==="move_shape"){var m=_dsSel.match(/^shape_(\d+)$/);if(m){var sh=_ds.shapes[parseInt(m[1])];sh.x=Math.round(_dsOrig.x+dx);sh.y=Math.round(_dsOrig.y+dy)}}
+			else if(_dsDragType.startsWith("move_vertex_")){
+				var p=_dsDragType.split("_");var si=parseInt(p[2]),vi=parseInt(p[3]),sh=_ds.shapes[si];
+				if(sh&&sh.vertices&&sh.vertices[vi]){
+					var nvx=_dsOrig.vx+dx/sh.w,nvy=_dsOrig.vy+dy/sh.h;
+					nvx=Math.max(0,Math.min(1,nvx));nvy=Math.max(0,Math.min(1,nvy));
+					sh.vertices[vi].x=Math.round(nvx*100)/100;sh.vertices[vi].y=Math.round(nvy*100)/100;
+				}
+			}
 			else if(_dsDragType.startsWith("corner_")){var c=_dsDragType.split("_")[1],nv=_dsOrig["br"+c]+Math.round((Math.abs(dx)>Math.abs(dy)?dx:dy)/2);nv=Math.max(0,Math.min(60,nv));_ds.card["br"+c]=nv}
 			buildPreview();
 		});
@@ -646,9 +750,7 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 			css+=".lib-card{position:relative;background:"+_ds.card.bg+";border-radius:"+_ds.card.brTL+"px "+_ds.card.brTR+"px "+_ds.card.brBR+"px "+_ds.card.brBL+"px;border:1px solid #e2e8f0;padding:0;display:block;cursor:pointer;transition:all .15s;min-height:"+_ds.card.h+"px}\n";
 			css+=".lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}\n";
 			css+=".lib-grid{gap:"+_ds.card.gap+"px}\n";
-			// Cover - always output, use display to hide
 			css+=".lib-card .cv{position:absolute;left:"+_ds.cover.x+"px;top:"+_ds.cover.y+"px;width:"+_ds.cover.w+"px;height:"+_ds.cover.h+"px;object-fit:cover;border-radius:"+_ds.cover.radius+"%;border:"+_ds.cover.ringW+"px solid "+_ds.cover.ringColor+";box-shadow:"+_ds.cover.shadow+";flex-shrink:0"+(typeof _ds.cover.visible==="boolean"&&!_ds.cover.visible?";display:none":"")+"}\n";
-			// Text elements - always output, hidden ones get display:none
 			["name","artist","bpm","duration","charters","tags"].forEach(function(t){
 				var cls=t.substring(0,2);var f=_ds[t].font==="默认"?"inherit":"'"+_ds[t].font+"'";
 				css+=".lib-card ."+cls+"{position:absolute;left:"+_ds[t].x+"px;top:"+_ds[t].y+"px;font-family:"+f+";font-size:"+_ds[t].size+"px;color:"+_ds[t].color+";font-weight:"+(_ds[t].weight||"normal")+";white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
@@ -656,16 +758,21 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 				if(_ds[t].visible===false)css+=";display:none";
 				css+="}\n";
 			});
-			// Tag badge fonts
 			var tf=_ds.tags.tagFont==="默认"?"inherit":"'"+_ds.tags.tagFont+"'";
 			css+=".lib-card .ta span{font-family:"+tf+";font-size:"+_ds.tags.tagSize+"px;color:"+_ds.tags.tagColor+"}\n";
-			// Shapes
 			(_ds.shapes||[]).forEach(function(sh,i){
+				normShape(sh);
 				css+=".lib-card .sh"+i+"{position:absolute;left:"+sh.x+"px;top:"+sh.y+"px;width:"+sh.w+"px;height:"+sh.h+"px;background:"+(sh.color||"#e2e8f0")+";opacity:"+(sh.opacity||1)+";z-index:"+(sh.zIndex||0);
-				if(sh.type==="circle")css+=";border-radius:50%";else if(sh.radius)css+=";border-radius:"+sh.radius+"px";
+				if(sh.type==="circle")css+=";border-radius:50%";
+				else if(sh.type==="rect"&&sh.radius)css+=";border-radius:"+sh.radius+"px";
+				else if(sh.type==="polygon"&&sh.vertices&&sh.vertices.length>=3){
+					var pts=sh.vertices.map(function(v){return Math.round(v.x*sh.w)+"px "+Math.round(v.y*sh.h)+"px"}).join(",");
+					css+=";clip-path:polygon("+pts+")";
+				}
 				css+="}\n";
 			});
-			fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({css:css,maxWidth:_ds.card.w+40,config:JSON.stringify({shapes:_ds.shapes,name:{prefix:_ds.name.prefix,suffix:_ds.name.suffix},artist:{prefix:_ds.artist.prefix,suffix:_ds.artist.suffix},bpm:{prefix:_ds.bpm.prefix,suffix:_ds.bpm.suffix},duration:{prefix:_ds.duration.prefix,suffix:_ds.duration.suffix},charters:{prefix:_ds.charters.prefix,suffix:_ds.charters.suffix}})})}).then(function(r){
+			var cfg={shapes:_ds.shapes,name:{prefix:_ds.name.prefix,suffix:_ds.name.suffix},artist:{prefix:_ds.artist.prefix,suffix:_ds.artist.suffix},bpm:{prefix:_ds.bpm.prefix,suffix:_ds.bpm.suffix},duration:{prefix:_ds.duration.prefix,suffix:_ds.duration.suffix},charters:{prefix:_ds.charters.prefix,suffix:_ds.charters.suffix}};
+			fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({css:css,maxWidth:_ds.card.w+40,config:JSON.stringify(cfg)})}).then(function(r){
 				if(r.ok){dsToast("已注入! 刷新曲库页查看效果")}else{dsToast("保存失败")}
 				btn.disabled=false;btn.textContent="注入保存";_dsSaving=false;
 			}).catch(function(){dsToast("保存失败");btn.disabled=false;btn.textContent="注入保存";_dsSaving=false});
@@ -676,8 +783,9 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 	})();
 
 
+
 })();
 </script>
-<script id="dsConfig" type="application/json">{}</script>
+<script id="dsConfig" type="application/json">{"shapes":[],"name":{"prefix":"","suffix":""},"artist":{"prefix":"","suffix":""},"bpm":{"prefix":"BPM:","suffix":""},"duration":{"prefix":"","suffix":""},"charters":{"prefix":"","suffix":""}}</script>
 </body>
 </html>
