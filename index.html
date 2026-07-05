@@ -93,7 +93,7 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 .lib-grid{display:flex;flex-direction:column;gap:8px}
 .lib-card{background:rgba(255,255,255,0.85);border-radius:12px;border:1px solid #e2e8f0;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:all .15s}
 .lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}
-.lib-card img{width:80px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0}
+.lib-card img{width:80px;height:80px;object-fit:cover;border-radius:50%;flex-shrink:0;border:3px solid #e2e8f0;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
 .lib-card .li{flex:1;min-width:0}
 .lib-card .li .ln{font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lib-card .li .la{font-size:11px;color:#64748b}
@@ -145,7 +145,7 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 
 <!-- ==================== 曲库查询 ==================== -->
 <div class="tab-content" id="tabLibrary">
-<div style="padding:20px;max-width:1100px;margin:0 auto;width:100%">
+<div style="padding:20px;max-width:1400px;margin:0 auto;width:100%">
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
 <div style="display:flex;gap:6px;flex-wrap:wrap" id="libFilters"><span class="tpl-capsule active" data-flt="ALL">ALL</span><span class="tpl-capsule" data-flt="4K">4键</span><span class="tpl-capsule" data-flt="5K">5键</span><span class="tpl-capsule" data-flt="6K">6键</span><span class="tpl-capsule" data-flt="Catch">Catch</span></div>
 <div style="flex:1"></div>
@@ -274,11 +274,15 @@ function renderLibrary(filter){
   if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
   var cov=s.cover||"";
   var tags="";
-  (s.charts||[]).forEach(function(c){
-   var maxL=0,hasCatch=false;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]){if(c[k].isMode3)hasCatch=true;else if(c[k].level>maxL)maxL=c[k].level}});
-   if(maxL)tags+="<span style=\"background:#dbeafe;color:#1e40af\">"+c.mode+" Lv."+maxL+"</span>";
-   if(hasCatch)tags+="<span style=\"background:#fce7f3;color:#9d174d\">"+c.mode+" Catch</span>";
-  });
+  if(_libFilter==="ALL"){
+   var tagSet={},hasCatch2=false;
+   (s.charts||[]).forEach(function(c){
+    var isCatch=false;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]&&c[k].isMode3){isCatch=true;hasCatch2=true}});
+    if(!isCatch)tagSet[c.mode]=true;
+   });
+   Object.keys(tagSet).forEach(function(m){tags+="<span style=\"background:#dbeafe;color:#1e40af\">"+m+"</span>"});
+   if(hasCatch2)tags+="<span style=\"background:#fce7f3;color:#9d174d\">Catch</span>";
+  }
   html+="<div class=\"lib-card\" onclick=\"showSongDetail("+i+")\">"+(cov?"<img src=\""+cov+"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" onerror=\"this.style.display=\x27none\x27\">":"")+"<div class=\"li\"><div class=\"ln\">"+escHtml(s.name)+"</div><div class=\"la\">"+escHtml(s.artist||"")+"</div><div class=\"lc\">BPM:"+(s.bpm||"?")+" | "+s.duration+" | "+(s.charters||[]).join(", ")+"</div><div class=\"ld\">"+tags+"</div></div></div>";
   count++;
  }
