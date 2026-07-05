@@ -85,11 +85,35 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 @media(max-width:900px){.a-grid{grid-template-columns:repeat(4,1fr)}.a-card{min-height:140px}}
 @media(max-width:700px){.a-grid{grid-template-columns:repeat(3,1fr)}.a-card{min-height:130px}}
 @media(max-width:480px){.a-grid{grid-template-columns:repeat(2,1fr);gap:8px}.a-card{min-height:120px;padding:8px 6px}.a-card .grp{font-size:12px}.a-card .cnt{font-size:10px}.cal-grid .day{font-size:11px;padding:5px 0}}
+
+/* --- 曲库查询 --- */
+.lib-search{width:100%;max-width:600px;padding:10px 16px;border:2px solid #cbd5e1;border-radius:12px;font-size:14px;font-family:inherit;outline:none;margin-bottom:16px;display:block;margin-left:auto;margin-right:auto}
+.lib-search:focus{border-color:#3b82f6}
+.lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.lib-card{background:rgba(255,255,255,0.85);border-radius:12px;border:1px solid #e2e8f0;padding:12px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:all .15s}
+.lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}
+.lib-card img{width:64px;height:64px;object-fit:cover;border-radius:8px;flex-shrink:0}
+.lib-card .li{flex:1;min-width:0}
+.lib-card .li .ln{font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .li .la{font-size:11px;color:#64748b}
+.lib-card .li .lc{font-size:10px;color:#94a3b8;margin-top:2px}
+.lib-card .li .ld{display:flex;flex-wrap:wrap;gap:2px;margin-top:3px}
+.lib-card .li .ld span{padding:1px 6px;border-radius:6px;font-size:9px;font-weight:600}
+.lib-stats{text-align:center;color:#64748b;font-size:13px;margin-bottom:12px}
+.lib-detail{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.5);z-index:1000;justify-content:center;align-items:flex-start;padding-top:32px;overflow-y:auto}
+.lib-detail.show{display:flex}
+.lib-detail .dd{background:#fff;border-radius:16px;padding:24px;width:500px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.lib-detail img{width:120px;height:120px;object-fit:cover;border-radius:12px;margin-bottom:12px}
+.lib-detail h3{font-size:18px;color:#1e293b;margin-bottom:4px}
+.lib-detail .da{font-size:13px;color:#64748b;margin-bottom:8px}
+.lib-detail audio{width:100%;height:32px;margin-top:8px}
+@media(max-width:480px){.lib-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="tab-bar">
-<button class="active">公告管理</button>
+<button class="active" data-tab="announce">公告管理</button>
+<button data-tab="library">曲库查询</button>
 </div>
 
 <!-- ==================== 公告管理 ==================== -->
@@ -117,10 +141,33 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 </div></div>
 </div>
 
+
+<!-- ==================== 曲库查询 ==================== -->
+<div class="tab-content" id="tabLibrary">
+<div style="padding:20px;max-width:1100px;margin:0 auto;width:100%">
+<h1 style="text-align:center;color:#1e293b;font-size:20px;margin-bottom:12px">曲库查询</h1>
+<input class="lib-search" id="libSearch" placeholder="搜索歌曲名、作者、谱师..." autocomplete="off">
+<div class="lib-stats" id="libStats"></div>
+<div class="lib-grid" id="libGrid"></div>
+</div>
+</div>
+
+<div class="lib-detail" id="libDetail"><div class="dd" id="libDetailContent"></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
 (function(){
+// ==================== TAB SWITCHING ====================
+document.querySelectorAll('.tab-bar button').forEach(function(btn){
+ btn.addEventListener('click',function(){
+  document.querySelectorAll('.tab-bar button').forEach(function(b){b.classList.remove('active')});
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active')});
+  document.getElementById('tab'+btn.dataset.tab.charAt(0).toUpperCase()+btn.dataset.tab.slice(1)).classList.add('active');
+  if(btn.dataset.tab==='library'&&!window._libLoaded){loadLibrary();window._libLoaded=true}
+ });
+});
+
 // ==================== 通用配置 ====================
 var API_BASE = location.hostname==='localhost' ? '' : 'https://win-mohsfa7n4b0.tailae715d.ts.net';
 var _trackUrl = API_BASE+'/api/visit';
@@ -198,6 +245,49 @@ loadData();
 })();
 
 
+
+// ==================== 曲库查询 ====================
+var LIB_DATA=[];
+async function loadLibrary(){
+ document.getElementById("libStats").textContent="Loading...";
+ try{
+  var r=await fetch("https://raw.githubusercontent.com/Liccha/song-library/master/data/songs.json");
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  LIB_DATA=await r.json();
+  document.getElementById("libStats").textContent=LIB_DATA.length+" songs loaded";
+  renderLibrary();
+ }catch(e){document.getElementById("libStats").textContent="Failed: "+e.message}
+}
+function renderLibrary(filter){
+ if(!LIB_DATA.length)return;
+ var q=(filter||"").toLowerCase(),html="",count=0;
+ for(var i=0;i<LIB_DATA.length;i++){
+  var s=LIB_DATA[i];
+  if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
+  var cov=s.cover||"";
+  var tags="";
+  (s.charts||[]).forEach(function(c){
+   var maxL=0;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]&&c[k].level>maxL)maxL=c[k].level});
+   if(maxL)tags+="<span style=\"background:#dbeafe;color:#1e40af\">"+c.mode+" "+maxL+"</span>";
+  });
+  html+="<div class=\"lib-card\" onclick=\"showSongDetail("+i+")\"><img src=\""+cov+"\" onerror=\"this.style.display=\x27none\x27\"><div class=\"li\"><div class=\"ln\">"+s.id+"-"+escHtml(s.name)+"</div><div class=\"la\">"+escHtml(s.artist||"")+"</div><div class=\"lc\">BPM:"+(s.bpm||"?")+" "+s.duration+"</div><div class=\"ld\">"+tags+"</div></div></div>";
+  count++;if(count>=100)break;
+ }
+ document.getElementById("libGrid").innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
+ document.getElementById("libStats").textContent=(filter?"Found "+count+"/"+LIB_DATA.length:"Showing "+Math.min(count,100)+" of "+LIB_DATA.length+" songs");
+}
+document.getElementById("libSearch").addEventListener("input",function(){renderLibrary(this.value)});
+function showSongDetail(idx){
+ var s=LIB_DATA[idx];if(!s)return;
+ var c=document.getElementById("libDetailContent");
+ var tags="";(s.charts||[]).forEach(function(c2){
+  var modes="";Object.keys(c2).forEach(function(k){if(k!=="mode"&&c2[k])modes+=k.toUpperCase()+c2[k].level+"("+c2[k].combo+") "});
+  tags+="<span style=\"display:inline-block;margin:2px 3px;padding:4px 10px;border-radius:8px;font-size:11px;background:#f1f5f9;color:#475569\"><b>"+c2.mode+"</b> "+modes+"</span>";
+ });
+ c.innerHTML="<img src=\""+(s.cover||"")+"\" onerror=\"this.style.display=\x27none\x27\"><h3>"+s.id+"-"+escHtml(s.name)+"</h3><div class=\"da\">"+escHtml(s.artist||"")+" | BPM:"+(s.bpm||"?")+" | "+s.duration+" | 谱师:"+(s.charters||[]).join(", ")+"</div><div style=\"margin-bottom:8px\">"+tags+"</div>"+(s.preview?"<audio controls src=\""+s.preview+"\"></audio>":"")+"<div style=\"margin-top:12px;font-size:10px;color:#94a3b8\">Album: "+(s.album||"-")+"</div>";
+ document.getElementById("libDetail").classList.add("show");
+}
+document.getElementById("libDetail").addEventListener("click",function(e){if(e.target===this)this.classList.remove("show")});
 })();
 </script>
 </body>
