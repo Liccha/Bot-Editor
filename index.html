@@ -254,15 +254,18 @@ async function loadLibrary(){
   var r=await fetch("https://raw.githubusercontent.com/Liccha/song-library/master/data/songs.json");
   if(!r.ok)throw new Error("HTTP "+r.status);
   LIB_DATA=await r.json();
+  LIB_DATA.sort(function(a,b){return b.id-a.id});
   document.getElementById("libStats").textContent=LIB_DATA.length+" songs loaded";
   renderLibrary();
  }catch(e){document.getElementById("libStats").textContent="Failed: "+e.message}
 }
 function renderLibrary(filter){
  if(!LIB_DATA.length)return;
- var q=(filter||"").toLowerCase(),html="",count=0;
+ var today=new Date();today=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
+ var q=(filter||"").toLowerCase(),html="",count=0,hidden=0;
  for(var i=0;i<LIB_DATA.length;i++){
   var s=LIB_DATA[i];
+  if(s.albumDate&&s.albumDate>today){hidden++;continue}
   if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
   var cov=s.cover||"";
   var tags="";
@@ -274,7 +277,8 @@ function renderLibrary(filter){
   count++;
  }
  document.getElementById("libGrid").innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
- document.getElementById("libStats").textContent=(filter?"Found "+count+"/"+LIB_DATA.length:"Showing "+Math.min(count,100)+" of "+LIB_DATA.length+" songs");
+ var total=LIB_DATA.length-hidden;
+ document.getElementById("libStats").textContent=(filter?"Found "+count+"/"+total:(hidden?"Showing "+total+" songs ("+hidden+" locked)":total+" songs"));
 }
 document.getElementById("libSearch").addEventListener("input",function(){renderLibrary(this.value)});
 function showSongDetail(idx){
