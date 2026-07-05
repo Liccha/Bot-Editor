@@ -88,18 +88,18 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 @media(max-width:480px){.a-grid{grid-template-columns:repeat(2,1fr);gap:8px}.a-card{min-height:120px;padding:8px 6px}.a-card .grp{font-size:12px}.a-card .cnt{font-size:10px}.cal-grid .day{font-size:11px;padding:5px 0}}
 
 /* --- 曲库查询 --- */
-.lib-search{width:100%;max-width:600px;padding:10px 16px;border:2px solid #cbd5e1;border-radius:12px;font-size:14px;font-family:inherit;outline:none;margin-bottom:16px;display:block;margin-left:auto;margin-right:auto}
+.lib-search{width:100%;max-width:740px;padding:10px 16px;border:2px solid #cbd5e1;border-radius:12px;font-size:14px;font-family:inherit;outline:none;margin-bottom:16px;display:block;margin-left:auto;margin-right:auto}
 .lib-search:focus{border-color:#3b82f6}
 .lib-grid{display:flex;flex-direction:column;gap:8px}
-.lib-card{background:rgba(255,255,255,0.85);border-radius:12px;border:1px solid #e2e8f0;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;cursor:pointer;transition:all .15s}
+.lib-card{position:relative;background:rgba(255,255,255,0.85);border-radius:60px 0px 60px 60px;border:1px solid #e2e8f0;padding:0;display:block;cursor:pointer;transition:all .15s;min-height:110px}
 .lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}
-.lib-card img{width:80px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0}
-.lib-card .li{flex:1;min-width:0}
-.lib-card .li .ln{font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lib-card .li .la{font-size:11px;color:#64748b}
-.lib-card .li .lc{font-size:10px;color:#94a3b8;margin-top:2px}
-.lib-card .li .ld{display:flex;flex-wrap:wrap;gap:2px;margin-top:3px}
-.lib-card .li .ld span{padding:1px 6px;border-radius:6px;font-size:9px;font-weight:600}
+.lib-card .cv{position:absolute;left:-18px;top:-7px;width:120px;height:120px;object-fit:cover;border-radius:50%;border:4px solid #2842a9;box-shadow:0 0 0 2px rgba(59,130,246,.15);flex-shrink:0}
+.lib-card .na{position:absolute;left:121px;top:14px;font-family:'演示斜黑体';font-size:18px;color:#000000;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .ar{position:absolute;left:122px;top:42px;font-family:'演示斜黑体';font-size:11px;color:#000000;font-weight:300;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .bp{position:absolute;left:121px;top:79px;font-family:'方正粗圆简体';font-size:14px;color:#000000;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .du{position:absolute;left:207px;top:79px;font-family:'方正粗圆简体';font-size:14px;color:#000000;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-card .ta{position:absolute;left:387px;top:16px;font-family:inherit;font-size:15px;color:#1e40af;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#dbeafe;padding:1px 6px;border-radius:4px}
+
 .lib-stats{text-align:center;color:#64748b;font-size:13px;margin-bottom:12px}
 .lib-detail{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.5);z-index:1000;justify-content:center;align-items:flex-start;padding-top:32px;overflow-y:auto}
 .lib-detail.show{display:flex}
@@ -107,14 +107,58 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 .lib-detail img{width:120px;height:120px;object-fit:cover;border-radius:12px;margin-bottom:12px}
 .lib-detail h3{font-size:18px;color:#1e293b;margin-bottom:4px}
 .lib-detail .da{font-size:13px;color:#64748b;margin-bottom:8px}
-.lib-detail audio{width:100%;height:32px;margin-top:8px}
-}
+.lib-detail audio{width:100%;height:32px;margin-top:8px}/* --- 卡片设计器 --- */
+.ds-workspace{display:flex;height:100%}
+.ds-canvas{flex:1;background:#e2e8f0;position:relative;overflow:auto;min-height:500px}
+.ds-canvas-bg{min-width:100%;min-height:100%;display:flex;align-items:center;justify-content:center;padding:40px}
+.ds-card-preview{position:relative;background:rgba(255,255,255,0.85);box-shadow:0 4px 20px rgba(0,0,0,.12);border:1px solid #e2e8f0;cursor:default;user-select:none}
+.ds-el{position:absolute;cursor:move;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:8px;min-height:8px}
+.ds-el.selected{outline:2px dashed #3b82f6;outline-offset:2px;z-index:5}
+.ds-el-cover{position:absolute;cursor:move;overflow:visible}
+.ds-el-cover img{display:block;width:100%;height:100%;object-fit:cover}
+.ds-el-cover.selected{outline:2px dashed #f59e0b;outline-offset:2px;z-index:5}
+.ds-resize-handle{position:absolute;width:8px;height:8px;background:#3b82f6;border:1.5px solid #fff;z-index:20;display:none}
+.selected .ds-resize-handle,.ds-el-cover.selected .ds-resize-handle{display:block}
+.ds-resize-handle.nw{top:-4px;left:-4px;cursor:nw-resize}
+.ds-resize-handle.ne{top:-4px;right:-4px;cursor:ne-resize}
+.ds-resize-handle.sw{bottom:-4px;left:-4px;cursor:sw-resize}
+.ds-resize-handle.se{bottom:-4px;right:-4px;cursor:se-resize}
+.ds-corner-handle{position:absolute;width:10px;height:10px;background:#10b981;border:2px solid #fff;border-radius:50%;z-index:15;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.ds-corner-handle:hover{background:#059669;transform:scale(1.2)}
+.ds-corner-handle:nth-child(1){top:-5px;left:-5px}
+.ds-corner-handle:nth-child(2){top:-5px;right:-5px}
+.ds-corner-handle:nth-child(3){bottom:-5px;left:-5px}
+.ds-corner-handle:nth-child(4){bottom:-5px;right:-5px}
+.ds-panel2{width:280px;background:#fff;border-left:1px solid #e2e8f0;overflow-y:auto;font-size:12px}
+.ds-panel2 h3{font-size:13px;color:#1e293b;font-weight:700;padding:12px;margin:0;border-bottom:1px solid #f1f5f9}
+.ds-prop{padding:8px 12px;border-bottom:1px solid #f1f5f9}
+.ds-prop label{font-size:10px;color:#94a3b8;display:block;margin-bottom:2px}
+.ds-prop input[type=range]{width:100%;accent-color:#3b82f6;margin:2px 0}
+.ds-prop input[type=color]{width:28px;height:22px;border:none;border-radius:3px;cursor:pointer;padding:0}
+.ds-prop select{width:100%;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;padding:2px 4px}
+.ds-prop .row{display:flex;align-items:center;gap:6px;margin:2px 0}
+.ds-prop .val{font-size:9px;color:#94a3b8}
+.ds-el-list{margin:4px 0}
+.ds-el-list .el-row{display:flex;align-items:center;gap:6px;padding:3px 12px;cursor:pointer;font-size:11px;color:#475569;border-left:3px solid transparent;transition:all .1s}
+.ds-el-list .el-row:hover{background:#f8fafc}
+.ds-el-list .el-row.sel{background:#eff6ff;border-left-color:#3b82f6;color:#1e40af}
+.ds-el-list .el-row .dot{width:6px;height:6px;border-radius:50%}
+.ds-toolbar{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #f1f5f9;background:#fafbfc}
+.ds-toolbar button{flex:1;padding:8px;border:none;border-radius:8px;font-size:12px;font-family:inherit;cursor:pointer;font-weight:600}
+.ds-toolbar .save-btn{background:#3b82f6;color:#fff}
+.ds-toolbar .save-btn:hover{background:#2563eb}
+.ds-toolbar .save-btn:disabled{opacity:.4}
+.ds-toolbar .reset-btn{background:#f1f5f9;color:#475569}
+.ds-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:8px 20px;border-radius:20px;font-size:12px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none}
+.ds-toast.show{opacity:1}
+@media(max-width:900px){.ds-panel2{width:240px}}
 </style>
 </head>
 <body>
 <div class="tab-bar">
 <button class="active" data-tab="announce">公告管理</button>
 <button data-tab="library">曲库查询</button>
+<button data-tab="design">卡片设计</button>
 </div>
 
 <!-- ==================== 公告管理 ==================== -->
@@ -145,7 +189,7 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 
 <!-- ==================== 曲库查询 ==================== -->
 <div class="tab-content" id="tabLibrary">
-<div style="padding:20px;max-width:1100px;margin:0 auto;width:100%">
+<div style="padding:20px;max-width:1400px;margin:0 auto;width:100%">
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
 <div style="display:flex;gap:6px;flex-wrap:wrap" id="libFilters"><span class="tpl-capsule active" data-flt="ALL">ALL</span><span class="tpl-capsule" data-flt="4K">4键</span><span class="tpl-capsule" data-flt="5K">5键</span><span class="tpl-capsule" data-flt="6K">6键</span><span class="tpl-capsule" data-flt="Catch">Catch</span></div>
 <div style="flex:1"></div>
@@ -155,6 +199,28 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 <div class="lib-grid" id="libGrid"></div>
 </div>
 </div>
+
+
+<!-- ==================== 卡片设计器 ==================== -->
+<div class="tab-content" id="tabDesign">
+<div class="ds-workspace">
+<div class="ds-canvas" id="dsCanvas">
+ <div class="ds-canvas-bg">
+  <div class="ds-card-preview" id="dsCard"></div>
+ </div>
+</div>
+<div class="ds-panel2">
+ <h3>元素列表</h3>
+ <div class="ds-el-list" id="dsElList"></div>
+ <div id="dsProps"></div>
+ <div class="ds-toolbar">
+  <button class="reset-btn" id="dsReset">重置</button>
+  <button class="save-btn" id="dsSave">注入保存</button>
+ </div>
+</div>
+</div>
+</div>
+<div class="ds-toast" id="dsToast"></div>
 
 <div class="lib-detail" id="libDetail"><div class="dd" id="libDetailContent"></div></div>
 <div class="toast" id="toast"></div>
@@ -274,12 +340,16 @@ function renderLibrary(filter){
   if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
   var cov=s.cover||"";
   var tags="";
-  (s.charts||[]).forEach(function(c){
-   var maxL=0,hasCatch=false;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]){if(c[k].isMode3)hasCatch=true;else if(c[k].level>maxL)maxL=c[k].level}});
-   if(maxL)tags+="<span style=\"background:#dbeafe;color:#1e40af\">"+c.mode+" Lv."+maxL+"</span>";
-   if(hasCatch)tags+="<span style=\"background:#fce7f3;color:#9d174d\">"+c.mode+" Catch</span>";
-  });
-  html+="<div class=\"lib-card\" onclick=\"showSongDetail("+i+")\">"+(cov?"<img src=\""+cov+"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" onerror=\"this.style.display=\x27none\x27\">":"")+"<div class=\"li\"><div class=\"ln\">"+escHtml(s.name)+"</div><div class=\"la\">"+escHtml(s.artist||"")+"</div><div class=\"lc\">BPM:"+(s.bpm||"?")+" | "+s.duration+" | "+(s.charters||[]).join(", ")+"</div><div class=\"ld\">"+tags+"</div></div></div>";
+  if(_libFilter==="ALL"){
+   var tagSet={},hasCatch2=false;
+   (s.charts||[]).forEach(function(c){
+    var isCatch=false;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]&&c[k].isMode3){isCatch=true;hasCatch2=true}});
+    if(!isCatch)tagSet[c.mode]=true;
+   });
+   Object.keys(tagSet).forEach(function(m){tags+="<span style=\"background:#dbeafe;color:#1e40af\">"+m+"</span>"});
+   if(hasCatch2)tags+="<span style=\"background:#fce7f3;color:#9d174d\">Catch</span>";
+  }
+  html+="<div class=\"lib-card\" onclick=\"showSongDetail("+i+")\">"+(cov?"<img class=\"cv\" src=\""+cov+"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" onerror=\"this.style.display='none'\">":"")+"<div class=\"na\">"+escHtml(s.name)+"</div><div class=\"ar\">"+escHtml(s.artist||"")+"</div><div class=\"bp\">BPM:"+(s.bpm||"?")+"</div><div class=\"du\">"+s.duration+"</div><div class=\"ch\">"+escHtml((s.charters||[]).join(", "))+"</div><div class=\"ta\">"+tags+"</div></div>";
   count++;
  }
  document.getElementById("libGrid").innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
@@ -299,6 +369,202 @@ function showSongDetail(idx){
  document.getElementById("libDetail").classList.add("show");
 }
 document.getElementById("libDetail").addEventListener("click",function(e){if(e.target===this)this.classList.remove("show")});
+
+	// ==================== 卡片设计器 (WYSIWYG) ====================
+	var _ds={
+		card:{w:700,h:110,bg:"rgba(255,255,255,0.85)",brTL:12,brTR:12,brBL:12,brBR:12},
+		cover:{x:14,y:14,w:80,h:80,radius:50,ringW:3,ringColor:"#e2e8f0",shadow:"0 0 0 2px rgba(59,130,246,.15)"},
+		name:{x:110,y:14,font:"默认",size:13,color:"#1e293b",weight:"bold",visible:true,type:"name"},
+		artist:{x:110,y:36,font:"默认",size:11,color:"#64748b",weight:"normal",visible:true,type:"artist"},
+		bpm:{x:110,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,type:"bpm"},
+		duration:{x:180,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,type:"duration"},
+		charters:{x:250,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,type:"charters"},
+		tags:{x:110,y:72,font:"默认",size:9,color:"#1e40af",bg:"#dbeafe",visible:true,type:"tags"}
+	};
+	var _dsSel=null,_dsDragType="",_dsStartX=0,_dsStartY=0,_dsOrig={},_dsFonts=[],_dsSaving=false;
+	(function initDesigner2(){
+		if(!document.querySelector('[data-tab="design"]'))return;
+		var API=API_BASE+"/api/design/save";
+		var card=document.getElementById("dsCard");
+		var elList=document.getElementById("dsElList"),props=document.getElementById("dsProps");
+
+		fetch(API_BASE+"/api/fonts/list").then(function(r){return r.json()}).then(function(f){_dsFonts=f}).catch(function(){});
+
+		function cardCSS(){
+			return "width:"+_ds.card.w+"px;height:"+_ds.card.h+"px;background:"+_ds.card.bg
+				+";border-radius:"+_ds.card.brTL+"px "+_ds.card.brTR+"px "+_ds.card.brBR+"px "+_ds.card.brBL+"px";
+		}
+
+		function buildPreview(){
+			card.style.cssText=cardCSS();
+			card.innerHTML="";
+			["TL","TR","BL","BR"].forEach(function(c){
+				var h=document.createElement("div");h.className="ds-corner-handle";h.dataset.corner=c;
+				h.addEventListener("mousedown",function(e){startDrag(e,"corner_"+c)});
+				card.appendChild(h);
+			});
+			if(_ds.cover.visible!==false){
+				var w=document.createElement("div");w.className="ds-el-cover";
+				w.style.cssText="left:"+_ds.cover.x+"px;top:"+_ds.cover.y+"px;width:"+_ds.cover.w+"px;height:"+_ds.cover.h+"px";
+				var img=document.createElement("img");
+				img.src="https://raw.githubusercontent.com/Liccha/song-library/master/covers/1.jpg";
+				img.style.cssText="border-radius:"+_ds.cover.radius+"%;border:"+_ds.cover.ringW+"px solid "+_ds.cover.ringColor+";box-shadow:"+_ds.cover.shadow;
+				img.onerror=function(){this.style.display="none"};img.draggable=false;
+				w.appendChild(img);
+				["nw","ne","sw","se"].forEach(function(p){var rh=document.createElement("div");rh.className="ds-resize-handle "+p;w.appendChild(rh)});
+				w.addEventListener("mousedown",function(e){if(e.target===img||e.target===w){selectEl("cover");startDrag(e,"move_cover")}});
+				card.appendChild(w);
+			}
+			var sample={name:"踏上旅途 (Take the Journey)",artist:"HOYO-MiX",bpm:"BPM:128",duration:"02:14",charters:"谱师A, 谱师B",tags:"4K 5K"};
+			["name","artist","bpm","duration","charters","tags"].forEach(function(t){
+				if(_ds[t].visible===false)return;
+				var el=document.createElement("div");el.className="ds-el";el.dataset.el=t;
+				el.style.cssText="left:"+_ds[t].x+"px;top:"+_ds[t].y+"px;font-family:"+(_ds[t].font==="默认"?"inherit":_ds[t].font)+";font-size:"+_ds[t].size+"px;color:"+_ds[t].color+";font-weight:"+(_ds[t].weight||"normal");
+				if(t==="tags")el.style.cssText+=";background:"+(_ds[t].bg||"#dbeafe")+";padding:1px 6px;border-radius:4px";
+				el.textContent=sample[t]||t;
+				el.addEventListener("mousedown",function(e){e.stopPropagation();selectEl(t);startDrag(e,"move_el")});
+				card.appendChild(el);
+			});
+			card.addEventListener("mousedown",function(e){if(e.target===card||e.target.classList.contains("ds-corner-handle"))selectEl(null)});
+		}
+
+		function selectEl(name){
+			_dsSel=name;
+			card.querySelectorAll(".ds-el,.ds-el-cover").forEach(function(el){el.classList.remove("selected")});
+			if(name==="cover"){var c=card.querySelector(".ds-el-cover");if(c)c.classList.add("selected")}
+			else if(name){var e=card.querySelector('.ds-el[data-el="'+name+'"]');if(e)e.classList.add("selected")}
+			buildElList();buildProps();
+		}
+
+		function buildElList(){
+			var h='<div class="el-row'+(null===_dsSel?' sel':'')+'" data-el=""><div class="dot" style="background:#94a3b8"></div> 卡片</div>';
+			[{id:"cover",label:"封面",color:"#f59e0b"},{id:"name",label:"歌曲名",color:_ds.name.color},{id:"artist",label:"作者",color:_ds.artist.color},{id:"bpm",label:"BPM",color:_ds.bpm.color},{id:"duration",label:"时长",color:_ds.duration.color},{id:"charters",label:"谱师",color:_ds.charters.color},{id:"tags",label:"标签",color:_ds.tags.color}].forEach(function(it){
+				h+='<div class="el-row'+(it.id===_dsSel?' sel':'')+'" data-el="'+it.id+'"><div class="dot" style="background:'+it.color+'"></div> '+it.label+' '+(it.id==="cover"?"":'<span style="font-size:9px;color:#94a3b8">'+(it.id==="name"?_ds[it.id].font+" "+_ds[it.id].size+"px":_ds[it.id].visible===false?"隐藏":"✓")+'</span>')+'</div>';
+			});
+			elList.innerHTML=h;
+			elList.querySelectorAll(".el-row").forEach(function(r){r.addEventListener("click",function(){selectEl(this.dataset.el||null)})});
+		}
+
+		function buildProps(){
+			props.innerHTML="";var n=_dsSel;
+			if(!n){
+				props.innerHTML="<h3>卡片属性</h3>"
+					+pr("宽度","card.w",200,1200)+pr("高度","card.h",40,200)
+					+pr("圆角TL","card.brTL",0,60)+pr("圆角TR","card.brTR",0,60)
+					+pr("圆角BL","card.brBL",0,60)+pr("圆角BR","card.brBR",0,60);
+			}else if(n==="cover"){
+				props.innerHTML="<h3>封面属性</h3>"
+					+pr("X位置","cover.x",-40,200)+pr("Y位置","cover.y",-40,80)
+					+pr("宽度","cover.w",30,200)+pr("高度","cover.h",30,200)
+					+pr("圆角%","cover.radius",0,50)+pr("边框粗细","cover.ringW",0,10)
+					+pc("边框颜色","cover.ringColor")+pi("光晕CSS","cover.shadow");
+			}else{
+				var labels={name:"歌曲名",artist:"作者",bpm:"BPM",duration:"时长",charters:"谱师",tags:"标签"};
+				props.innerHTML="<h3>"+labels[n]+" 属性</h3>"
+					+pch(n+"可见",n+".visible")+pr("X位置",n+".x",-100,800)+pr("Y位置",n+".y",-40,180)
+					+pr("字号",n+".size",8,36)+pc("颜色",n+".color");
+				if(n!=="tags"){props.innerHTML+=ps("字体",n+".font");props.innerHTML+=ps2("粗细",n+".weight")}
+				else{props.innerHTML+=pc("背景色",n+".bg")}
+			}
+			bindPropEvents();
+		}
+
+		function getVal(path){var p=path.split(".");var o=_ds;for(var i=1;i<p.length;i++){o=o[p[i]];if(o===undefined)return""}return o}
+		function setVal(path,val){var p=path.split(".");var o=_ds;for(var i=1;i<p.length-1;i++)o=o[p[i]];o[p[p.length-1]]=val}
+
+		function pr(label,id,min,max){
+			var path="_ds."+id,v=getVal(path),vid=id.replace(".","_");
+			return '<div class="ds-prop"><label>'+label+' <span class="val" id="dsv_'+vid+'">'+v+'</span></label><input type="range" data-path="'+path+'" min="'+min+'" max="'+max+'" value="'+v+'"></div>';
+		}
+		function pc(label,id){
+			return '<div class="ds-prop"><div class="row"><label style="flex:1">'+label+'</label><input type="color" data-path="_ds.'+id+'" value="'+getVal("_ds."+id)+'"></div></div>';
+		}
+		function pi(label,id){
+			return '<div class="ds-prop"><label>'+label+'</label><input type="text" data-path="_ds.'+id+'" value="'+String(getVal("_ds."+id)).replace(/"/g,"&quot;")+'" style="width:100%;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;padding:2px 4px"></div>';
+		}
+		function ps(label,id){
+			var h="<div class='ds-prop'><label>"+label+"</label><select data-path='_ds."+id+"'><option value='默认'>默认</option>";
+			_dsFonts.forEach(function(f){h+="<option value='"+f.name+"'>"+f.name+"</option>"});
+			h+="</select></div>";return h;
+		}
+		function ps2(label,id){
+			var h="<div class='ds-prop'><label>"+label+"</label><select data-path='_ds."+id+"'>";
+			[["normal","正常"],["bold","粗体"],["300","细体"]].forEach(function(o){h+="<option value='"+o[0]+"'>"+o[1]+"</option>"});
+			h+="</select></div>";return h;
+		}
+		function pch(label,id){
+			var name=id.split(".")[0];
+			return '<div class="ds-prop"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-path="_ds.'+id+'" '+(getVal("_ds."+name+".visible")!==false?"checked":"")+'> '+label+'</label></div>';
+		}
+
+		function bindPropEvents(){
+			props.querySelectorAll("input[type=range]").forEach(function(el){
+				var path=el.dataset.path,id=path.replace("_ds.","").replace(".","_"),vid=document.getElementById("dsv_"+id);
+				if(vid)vid.textContent=getVal(path);
+				el.addEventListener("input",function(){setVal(path,parseInt(this.value));if(vid)vid.textContent=this.value;buildPreview()});
+			});
+			props.querySelectorAll("input[type=color]").forEach(function(el){el.addEventListener("input",function(){setVal(this.dataset.path,this.value);buildPreview()})});
+			props.querySelectorAll("input[type=text]").forEach(function(el){el.addEventListener("input",function(){setVal(this.dataset.path,this.value);buildPreview()})});
+			props.querySelectorAll("select").forEach(function(el){el.addEventListener("change",function(){setVal(this.dataset.path,this.value);buildPreview()})});
+			props.querySelectorAll("input[type=checkbox]").forEach(function(el){el.addEventListener("change",function(){setVal(this.dataset.path,this.checked);buildPreview()})});
+		}
+
+		function startDrag(e,type){
+			e.preventDefault();_dsDragType=type;_dsStartX=e.clientX;_dsStartY=e.clientY;
+			if(type==="move_el"&&_dsSel){_dsOrig.x=getVal("_ds."+_dsSel+".x");_dsOrig.y=getVal("_ds."+_dsSel+".y")}
+			else if(type==="move_cover"){_dsOrig.x=_ds.cover.x;_dsOrig.y=_ds.cover.y}
+			else if(type.startsWith("corner_")){var c=type.split("_")[1];["TL","TR","BL","BR"].forEach(function(x){_dsOrig["br"+x]=_ds.card["br"+x]})}
+		}
+
+		document.addEventListener("mousemove",function(e){
+			if(!_dsDragType)return;
+			var dx=e.clientX-_dsStartX,dy=e.clientY-_dsStartY;
+			if(_dsDragType==="move_el"){setVal("_ds."+_dsSel+".x",Math.round(_dsOrig.x+dx));setVal("_ds."+_dsSel+".y",Math.round(_dsOrig.y+dy))}
+			else if(_dsDragType==="move_cover"){_ds.cover.x=Math.round(_dsOrig.x+dx);_ds.cover.y=Math.round(_dsOrig.y+dy)}
+			else if(_dsDragType.startsWith("corner_")){var c=_dsDragType.split("_")[1],nv=_dsOrig["br"+c]+Math.round((Math.abs(dx)>Math.abs(dy)?dx:dy)/2);nv=Math.max(0,Math.min(60,nv));_ds.card["br"+c]=nv}
+			buildPreview();
+		});
+		document.addEventListener("mouseup",function(){_dsDragType=""});
+
+		var _loadedFonts={};
+		function loadFont(name){
+			if(_loadedFonts[name]||name==="默认")return;
+			_loadedFonts[name]=true;
+			var f=_dsFonts.find(function(x){return x.name===name});if(!f)return;
+			var s=document.createElement("style");
+			s.textContent="@font-face{font-family:'"+name+"';src:url('"+API_BASE+"/api/fonts/file?"+f.file+"') format('"+(f.file.endsWith(".ttf")?"truetype":"opentype")+"')}";
+			document.head.appendChild(s);
+		}
+		var _origBP=buildProps;buildProps=function(){_origBP();if(_dsSel&&_dsSel!=="cover"&&_dsSel!=="tags"){var fn=getVal("_ds."+_dsSel+".font");if(fn&&fn!=="默认")loadFont(fn)}};
+
+		function dsToast(msg){var t=document.getElementById("dsToast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
+
+		document.getElementById("dsSave").addEventListener("click",function(){
+			if(_dsSaving)return;_dsSaving=true;
+			var btn=this;btn.disabled=true;btn.textContent="保存中...";
+			var css="";
+			css+=".lib-card{position:relative;background:"+_ds.card.bg+";border-radius:"+_ds.card.brTL+"px "+_ds.card.brTR+"px "+_ds.card.brBR+"px "+_ds.card.brBL+"px;border:1px solid #e2e8f0;padding:0;display:block;cursor:pointer;transition:all .15s;min-height:"+_ds.card.h+"px}\n";
+			css+=".lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}\n";
+			if(_ds.cover.visible!==false){
+				css+=".lib-card .cv{position:absolute;left:"+_ds.cover.x+"px;top:"+_ds.cover.y+"px;width:"+_ds.cover.w+"px;height:"+_ds.cover.h+"px;object-fit:cover;border-radius:"+_ds.cover.radius+"%;border:"+_ds.cover.ringW+"px solid "+_ds.cover.ringColor+";box-shadow:"+_ds.cover.shadow+";flex-shrink:0}\n";
+			}
+			["name","artist","bpm","duration","charters","tags"].forEach(function(t){
+				if(_ds[t].visible===false)return;
+				var cls=t.substring(0,2);var f=_ds[t].font==="默认"?"inherit":"'"+_ds[t].font+"'";
+				css+=".lib-card ."+cls+"{position:absolute;left:"+_ds[t].x+"px;top:"+_ds[t].y+"px;font-family:"+f+";font-size:"+_ds[t].size+"px;color:"+_ds[t].color+";font-weight:"+(_ds[t].weight||"normal")+";white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+				if(t==="tags")css+=";background:"+(_ds[t].bg||"#dbeafe")+";padding:1px 6px;border-radius:4px";
+				css+="}\n";
+			});
+			fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({css:css,maxWidth:_ds.card.w+40})}).then(function(r){
+				if(r.ok){dsToast("已注入! 刷新曲库页查看效果")}else{dsToast("保存失败")}
+				btn.disabled=false;btn.textContent="注入保存";_dsSaving=false;
+			}).catch(function(){dsToast("保存失败");btn.disabled=false;btn.textContent="注入保存";_dsSaving=false});
+		});
+
+		document.getElementById("dsReset").addEventListener("click",function(){location.reload()});
+		document.querySelector('[data-tab="design"]').addEventListener("click",function(){buildPreview();buildElList();buildProps()});
+	})();
+
 })();
 </script>
 </body>
