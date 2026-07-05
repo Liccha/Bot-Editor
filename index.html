@@ -270,15 +270,16 @@ function renderLibrary(filter){
  for(var i=0;i<LIB_DATA.length;i++){
   var s=LIB_DATA[i];
   if(s.albumDate&&s.albumDate>today){hidden++;continue}
-  if(_libFilter!=="ALL"){var hasMode=false;(s.charts||[]).forEach(function(c){if(_libFilter==="Catch"){if(c.isMode3||c.mode==="CATCH")hasMode=true}else{if(c.mode===_libFilter)hasMode=true}});if(!hasMode){hidden++;continue}}
+  if(_libFilter!=="ALL"){var hasMode=false;(s.charts||[]).forEach(function(c){if(_libFilter==="Catch"){var ok=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&c[k].isMode3});if(ok)hasMode=true}else{if(c.mode===_libFilter){var ok2=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&!c[k].isMode3&&(c[k].level>0||c[k].combo>0)});if(ok2)hasMode=true}}});if(!hasMode){hidden++;continue}}
   if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
   var cov=s.cover||"";
   var tags="";
   (s.charts||[]).forEach(function(c){
-   var maxL=0;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]&&c[k].level>maxL)maxL=c[k].level});
+   var maxL=0,hasCatch=false;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]){if(c[k].isMode3)hasCatch=true;else if(c[k].level>maxL)maxL=c[k].level}});
    if(maxL)tags+="<span style=\"background:#dbeafe;color:#1e40af\">"+c.mode+" Lv."+maxL+"</span>";
+   if(hasCatch)tags+="<span style=\"background:#fce7f3;color:#9d174d\">"+c.mode+" Catch</span>";
   });
-  html+="<div class=\"lib-card\" onclick=\"showSongDetail("+i+")\"><img src=\""+cov+"\" onerror=\"this.style.display=\x27none\x27\"><div class=\"li\"><div class=\"ln\">"+escHtml(s.name)+"</div><div class=\"la\">"+escHtml(s.artist||"")+"</div><div class=\"lc\">BPM:"+(s.bpm||"?")+" | "+s.duration+" | "+(s.charters||[]).join(", ")+"</div><div class=\"ld\">"+tags+"</div></div></div>";
+  html+="<div class=\"lib-card\" onclick=\"showSongDetail("+i+")\">"+(cov?"<img src=\""+cov+"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" onerror=\"this.style.display=\x27none\x27\">":"")+"<div class=\"li\"><div class=\"ln\">"+escHtml(s.name)+"</div><div class=\"la\">"+escHtml(s.artist||"")+"</div><div class=\"lc\">BPM:"+(s.bpm||"?")+" | "+s.duration+" | "+(s.charters||[]).join(", ")+"</div><div class=\"ld\">"+tags+"</div></div></div>";
   count++;
  }
  document.getElementById("libGrid").innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
@@ -291,10 +292,10 @@ function showSongDetail(idx){
  var s=LIB_DATA[idx];if(!s)return;
  var c=document.getElementById("libDetailContent");
  var tags="";(s.charts||[]).forEach(function(c2){
-  var modes="";Object.keys(c2).forEach(function(k){if(k!=="mode"&&c2[k])modes+=k.toUpperCase()+c2[k].level+"("+c2[k].combo+") "});
+  var modes="";Object.keys(c2).forEach(function(k){if(k!=="mode"&&c2[k]){if(c2[k].isMode3)modes+=k.toUpperCase()+":"+c2[k].name+" ";else modes+=k.toUpperCase()+c2[k].level+"("+c2[k].combo+") "}});
   tags+="<span style=\"display:inline-block;margin:2px 3px;padding:4px 10px;border-radius:8px;font-size:11px;background:#f1f5f9;color:#475569\"><b>"+c2.mode+"</b> "+modes+"</span>";
  });
- c.innerHTML="<img src=\""+(s.cover||"")+"\" onerror=\"this.style.display=\x27none\x27\"><h3>"+escHtml(s.name)+"</h3><div class=\"da\">"+escHtml(s.artist||"")+" | BPM:"+(s.bpm||"?")+" | "+s.duration+" | 谱师:"+(s.charters||[]).join(", ")+"</div><div style=\"margin-bottom:8px\">"+tags+"</div>"+(s.preview?"<audio controls src=\""+s.preview+"\"></audio>":"")+"<div style=\"margin-top:12px;font-size:10px;color:#94a3b8\">Album: "+(s.album||"-")+"</div>";
+ c.innerHTML=(s.cover?"<img src=\""+s.cover+"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" onerror=\"this.style.display=\x27none\x27\">":"")+"<h3>"+escHtml(s.name)+"</h3><div class=\"da\">"+escHtml(s.artist||"")+" | BPM:"+(s.bpm||"?")+" | "+s.duration+" | 谱师:"+(s.charters||[]).join(", ")+"</div><div style=\"margin-bottom:8px\">"+tags+"</div>"+(s.preview?"<audio controls src=\""+s.preview+"\"></audio>":"")+"<div style=\"margin-top:12px;font-size:10px;color:#94a3b8\">Album: "+(s.album||"-")+"</div>";
  document.getElementById("libDetail").classList.add("show");
 }
 document.getElementById("libDetail").addEventListener("click",function(e){if(e.target===this)this.classList.remove("show")});
