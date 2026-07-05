@@ -37,26 +37,6 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 .a-pager button{padding:7px 22px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#1e293b;cursor:pointer;font-size:13px;font-family:inherit}
 .a-pager button:disabled{opacity:.35;cursor:default}
 .a-pager span{font-size:13px;color:#64748b}
-/* --- MCZ 样式 --- */
-.m-layout{display:flex;flex:1;min-height:0}
-.m-side{width:320px;background:#fff;border-right:1px solid #e2e8f0;overflow-y:auto;padding:16px;flex-shrink:0}
-.m-main{flex:1;overflow-y:auto;padding:20px 24px}
-.m-drop{min-height:160px;border:2px dashed #cbd5e1;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer;transition:all .2s;margin-bottom:12px;text-align:center;line-height:1.6}
-.m-drop:hover,.m-drop.drag{border-color:#3b82f6;color:#3b82f6;background:#eff6ff}
-.m-info-row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
-.m-info-row .lbl{color:#64748b}.m-info-row .val{color:#1e293b;font-weight:600}
-.m-section{margin-bottom:14px}
-.m-section h3{font-size:13px;font-weight:700;color:#334155;margin-bottom:6px}
-.m-img-grid{display:flex;flex-wrap:wrap;gap:8px}
-.m-img-grid img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid transparent;cursor:pointer;transition:all .15s}
-.m-img-grid img:hover,.m-img-grid img.sel{border-color:#3b82f6}
-.m-matrix{border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px;background:#f8fafc}
-.m-matrix h4{font-size:12px;color:#1e293b;margin-bottom:4px;text-align:center}
-.m-capsule{display:inline-block;padding:3px 12px;border-radius:12px;font-size:12px;margin:2px 3px;border:1px solid #e2e8f0}
-.m-capsule.ez{background:#e6f7e6;color:#006400}.m-capsule.nm{background:#fff8e1;color:#826a00}
-.m-capsule.hd{background:#ffe6e6;color:#b40000}.m-capsule.mx,.m-capsule.sp{background:linear-gradient(90deg,#ffd4d4,#ffffd4,#d4ffd4,#d4d4ff,#e4d4ff);color:#320064}
-.m-audio{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fff;border-radius:8px;border:1px solid #e2e8f0;margin-top:10px}
-.m-audio button{padding:4px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:12px}
 /* --- Shared --- */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 24px;border-radius:10px;border:none;font-size:14px;font-family:inherit;cursor:pointer;font-weight:600;transition:all .15s}
 .btn.primary{background:#3b82f6;color:#fff;box-shadow:0 2px 8px rgba(59,130,246,.3)}
@@ -109,8 +89,7 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 </head>
 <body>
 <div class="tab-bar">
-<button class="active" data-tab="announce">公告管理</button>
-<button data-tab="mcz">谱面处理</button>
+<button class="active">公告管理</button>
 </div>
 
 <!-- ==================== 公告管理 ==================== -->
@@ -138,24 +117,6 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 </div></div>
 </div>
 
-<!-- ==================== 谱面处理 ==================== -->
-<div class="tab-content" id="tabMcz">
-<div class="m-drop" id="mDrop" style="margin:20px">📦 拖拽 .mcz 文件到此处<br><small style="font-size:11px">或点击选择文件</small></div>
-<input type="file" id="mInput" accept=".mcz" style="display:none">
-<div id="mResult" style="display:none;flex:1;overflow-y:auto;padding:20px">
-<!-- 歌曲信息胶囊 -->
-<div id="mInfoCapsules" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
-<!-- 封面图库 -->
-<div id="mImgGallery" style="margin-bottom:14px"><div id="mImgTitle" style="font-size:13px;font-weight:700;color:#1e293b;padding:8px 12px;background:#fff8e7;border:1px solid #ebd8b0;border-radius:10px 10px 0 0">封面选择</div><div id="mImgGrid" style="display:flex;flex-wrap:wrap;gap:10px;padding:10px;background:#fffbf5;border:1px solid #ebd8b0;border-top:none;border-radius:0 0 10px 10px;min-height:60px;align-items:center"></div></div>
-<!-- 音频区域 -->
-<div id="mAudioSection" style="display:none;margin-bottom:14px"><div style="font-size:13px;font-weight:700;color:#1e293b;padding:8px 12px;background:#e6f5ee;border:1px solid #b8d8c8;border-radius:10px 10px 0 0">音频预览与剪辑</div><div style="padding:10px;background:#f2faf6;border:1px solid #b8d8c8;border-top:none;border-radius:0 0 10px 10px"><div id="mAudioList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div><div style="display:flex;align-items:center;gap:8px"><button id="mPlayBtn" class="btn secondary" style="padding:5px 14px">▶ 播放</button><input type="range" id="mProgress" style="flex:1" min="0" max="1000" value="0"><span id="mTimeLabel" style="font-size:11px;color:#64748b;min-width:80px;text-align:right">00:00 / 00:00</span></div></div></div>
-<!-- 谱面难度矩阵 -->
-<div id="mCharts" style="display:none"><div id="mMatrixTitle" style="font-size:13px;font-weight:700;color:#1e293b;padding:8px 12px;background:#ede9fe;border:1px solid #c4b5fd;border-radius:10px 10px 0 0">谱面难度矩阵</div><div id="matrixGrid" style="padding:10px;background:#f8f7ff;border:1px solid #c4b5fd;border-top:none;border-radius:0 0 10px 10px"></div></div>
-<!-- 写入按钮 -->
-<div style="margin-top:16px;display:flex;gap:10px" id="mBtnRow" hidden><button class="btn primary" id="mWriteBtn">写入 Excel 表格</button></div>
-</div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
@@ -164,16 +125,6 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 var API_BASE = location.hostname==='localhost' ? '' : 'https://win-mohsfa7n4b0.tailae715d.ts.net';
 var _trackUrl = API_BASE+'/api/visit';
 fetch(_trackUrl,{method:'POST'}).catch(function(){});
-
-// ==================== TAB SWITCHING ====================
-document.querySelectorAll('.tab-bar button').forEach(function(btn){
- btn.addEventListener('click',function(){
-  document.querySelectorAll('.tab-bar button').forEach(function(b){b.classList.remove('active')});
-  btn.classList.add('active');
-  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active')});
-  document.getElementById('tab'+btn.dataset.tab.charAt(0).toUpperCase()+btn.dataset.tab.slice(1)).classList.add('active');
- });
-});
 
 function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2000)}
 function pad(n){return n<10?'0'+n:''+n}
@@ -234,8 +185,7 @@ function openEditor(idx){editIdx=idx;editExisting=idx>=0?data[idx]:null;// 复�
 var existSession='';if(editExisting&&editExisting.attach){var m=editExisting.attach.match(/^([^|]+)\//);if(m)existSession=m[1]}
 if(editExisting&&editExisting.image){var m2=editExisting.image.match(/^([^/]+)\//);if(m2)existSession=m2[1]}
 _session=existSession||('ann_'+Date.now());_imgData=null;_imgXhr=null;document.getElementById('dlgTitle').textContent=idx>=0?'编辑公告':'新建公告';document.getElementById('fContent').value=editExisting?(editExisting.content||'').replace(/\\n/g,'\n'):'';var dt=(editExisting&&editExisting.time)?editExisting.time:fmt(nowDate());document.getElementById('fTime').value=dt;var gid=editExisting?editExisting.groupId||'858973074':'858973074';document.getElementById('fGroup').value=(gid==='****')?'****':gid;document.getElementById('fPin').checked=editExisting&&editExisting.pin==='true';document.getElementById('fConfirm').checked=editExisting&&editExisting.confirm==='true';document.getElementById('fImage').value='';if(editExisting&&editExisting.image){_imgData=editExisting.image;var imgDisp=editExisting.image.replace(/^.*\//,'');document.getElementById('imgName').textContent=imgDisp;document.getElementById('imgName').style.color='#22c55e'}else{_imgData=null;document.getElementById('imgName').textContent='未选择';document.getElementById('imgName').style.color='#94a3b8'}_files=[];if(editExisting&&editExisting.attach){var ps=editExisting.attach.split('|');for(var i=0;i<ps.length;i++){if(ps[i]){var raw=ps[i],nm=raw.replace(/^.*\//,'');_files.push({name:nm,token:raw})}}}renderAttach();document.getElementById('dlgOverlay').classList.add('show')}
-var TEMPLATES={album:"【更新公告】专辑《》已开放下载!\n——————————\n内含歌曲：\n",event:"【茶韵Event轮换公告】\n——————————\n▍Event轮换更新预告🔸\n《》将于当前商店活动中专辑结束后限时上架，届时将开启排行榜进行计分。\n▍Event开放时间🔸\nxx/xx 08:00-xx/xx 08:00\n▍专辑曲目🔸\n\n▍活动说明🔸\n此专辑为xx第x期Event，活动成绩参与排名和热度总计。\n",single:"【吼吼点唱机轮换公告】\n————————\n《》→《》\n",cover:"//观影封面",position:"//观影定位"};
-document.querySelectorAll(".tpl-capsule").forEach(function(el){el.addEventListener("click",function(){document.getElementById("fContent").value=TEMPLATES[this.dataset.tpl]||""})});
+var TEMPLATES={album:"【更新公告】专辑《》已开放下载!\n——————————\n内含歌曲：\n",event:"【茶韵Event轮换公告】\n——————————\n▍Event轮换更新预告🔸\n《》将于当前商店活动中专辑结束后限时上架，届时将开启排行榜进行计分。\n▍Event开放时间🔸\nxx/xx 08:00-xx/xx 08:00\n▍专辑曲目🔸\n\n▍活动说明🔸\n此专辑为xx第x期Event，活动成绩参与排名和热度总计。\n",single:"【吼吼点唱机轮换公告】\n————————\n《》→《》\n",cover:"//观影封面\n",position:"//观影定位\n"};document.querySelectorAll(".tpl-capsule").forEach(function(el){el.addEventListener("click",function(){document.getElementById("fContent").value=TEMPLATES[this.dataset.tpl]||""})});
 function cancelEditor(){if(_session&&!editExisting){fetch(UPLOAD_API,{method:'DELETE',headers:{'X-Session':_session}})}document.getElementById('dlgOverlay').classList.remove('show')}
 document.getElementById('btnCancel').addEventListener('click',cancelEditor);
 async function doSave(){var ct=document.getElementById('fContent').value.trim();if(!ct){toast('公告内容不能为空！');return}if(ct.length>600){toast('公告内容不能超过 600 字！当前 '+ct.length+' 字');return}// 等待所有上传完成
@@ -247,99 +197,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')document.get
 loadData();
 })();
 
-// ==================== MCZ 谱面处理 ====================
-(function(){
-var MAPI=API_BASE+'/api/mcz/parse',mData=null,mSelImg=-1,mAudio=null,mPlayState=0;
-var fi=document.getElementById("mInput"),mDrop=document.getElementById("mDrop");
-
-// Drag on entire tab area
-mDrop.addEventListener("click",function(){fi.click()});
-mDrop.addEventListener("dragover",function(e){e.preventDefault();mDrop.classList.add("drag")});
-mDrop.addEventListener("dragleave",function(){mDrop.classList.remove("drag")});
-mDrop.addEventListener("drop",function(e){e.preventDefault();mDrop.classList.remove("drag");if(e.dataTransfer.files[0])handleMcz(e.dataTransfer.files[0])});
-document.body.addEventListener('dragover',function(e){if(document.getElementById('tabMcz').classList.contains('active'))e.preventDefault()});
-document.body.addEventListener('drop',function(e){if(document.getElementById('tabMcz').classList.contains('active')){e.preventDefault();if(e.dataTransfer.files[0])handleMcz(e.dataTransfer.files[0])}});
-fi.addEventListener('change',function(){if(this.files[0])handleMcz(this.files[0])});
-
-async function handleMcz(file){
- if(!file.name.toLowerCase().endsWith('.mcz')){toast('请选择 .mcz 文件！');return}
- mDrop.innerHTML='<span style="color:#3b82f6">⏳ 正在解析 ' + escHtml(file.name) + ' ...</span>';
- try{
-  var buf=await file.arrayBuffer();
-  var r=await fetch(MAPI,{method:'POST',headers:{'X-Filename':encodeURIComponent(file.name)},body:buf});
-  if(!r.ok)throw new Error('HTTP '+r.status);
-  mData=await r.json();renderMcz()
- }catch(e){toast('解析失败: '+e.message)}
-}
-
-function renderMcz(){
- var d=mData;mDrop.style.display='none';document.getElementById('mResult').style.display='block';document.getElementById('mCharts').style.display='block';document.getElementById('mBtnRow').hidden=false;
- // info capsules
- var caps=document.getElementById('mInfoCapsules'),charterSet={};
- (d.charts||[]).forEach(function(c){if(c.charter)charterSet[c.charter]=true});
- var charters=Object.keys(charterSet).join('、')||'未知';
- var bpmSet={};(d.charts||[]).forEach(function(c){if(c.bpm)bpmSet[c.bpm]=true});
- var bpmStr=Object.keys(bpmSet).join('/')||'未知';
- var h='';
- h+=mkcapsule('歌曲: '+d.songName,'#e0f0ff','#0050a0');
- h+=mkcapsule('作者: '+d.artist,'#e6fae6','#006400');
- h+=mkcapsule('谱师: '+charters,'#fff0e0','#964600');
- h+=mkcapsule('BPM: '+bpmStr,'#f0e6ff','#640096');
- h+=mkcapsule('时长: '+d.duration,'#ffe6e6','#960000');
- caps.innerHTML=h;
- // image gallery
- var ig=document.getElementById('mImgGrid');ig.innerHTML='';
- if(d.imgTokens&&d.imgTokens.length>0){
-  for(var i=0;i<d.imgTokens.length;i++){(function(idx){
-   var wrap=document.createElement('div');wrap.style.cssText='text-align:center;cursor:pointer';
-   var img=document.createElement('img');img.src=API_BASE+'/api/mcz/file?'+d.imgTokens[idx];img.style.cssText='width:96px;height:96px;object-fit:cover;border-radius:8px;border:3px solid '+(idx===mSelImg?'#dc3232':'#ddd');
-   var ratio=d.imageRatios&&d.imageRatios[idx]?d.imageRatios[idx]:'?';
-   var lbl=document.createElement('div');lbl.textContent=ratio;lbl.style.cssText='font-size:10px;color:#64748b;margin-top:2px';
-   wrap.onclick=function(){mSelImg=idx;renderChartsM();renderMcz()};
-   wrap.appendChild(img);wrap.appendChild(lbl);ig.appendChild(wrap)})(i)}
-  document.getElementById('mImgTitle').textContent='封面选择 (红框选中,已选'+(mSelImg>=0?'第'+(mSelImg+1)+'张)':"未选"+')');
- }else{document.getElementById('mImgTitle').textContent='封面选择 (无图片)'}
- // audio
- if(d.audioToken){document.getElementById('mAudioSection').style.display='block';
-  var al=document.getElementById('mAudioList');
-  al.innerHTML='<audio controls style="width:100%;height:32px"><source src="'+API_BASE+'/api/mcz/audio?'+d.audioToken+'" type="audio/ogg"></audio>'}
- else{document.getElementById('mAudioSection').style.display='none'}
- renderChartsM();mSelImg=mSelImg<0&&d.imgTokens&&d.imgTokens.length>0?0:mSelImg
-}
-
-function mkcapsule(text,bg,fg){return '<span style="display:inline-block;padding:5px 14px;border-radius:16px;font-size:13px;font-weight:600;background:'+bg+';color:'+fg+';margin:2px 4px">'+escHtml(text)+'</span>'}
-
-function renderChartsM(){
- var d=mData,mg=document.getElementById('matrixGrid'),html='',ks=['4K','5K','6K','7K','8K'];
- var diffs=[{k:'简单',v:['ez','easy'],bg:'#e6f7e6',fg:'#006400'},{k:'普通',v:['nm','normal'],bg:'#fff8e1',fg:'#826a00'},{k:'困难',v:['hd','hard'],bg:'#ffe6e6',fg:'#b40000'},{k:'大师',v:['mx','master','ms'],bg:'rainbow',fg:'#320064'},{k:'特殊',v:['sp','special'],bg:'rainbow',fg:'#320064'}];
- var hasMX=false,hasSP=false;(d.charts||[]).forEach(function(c){var v=c.version.toLowerCase();if(v.indexOf('mx')>=0||v.indexOf('ms')>=0||v.indexOf('master')>=0)hasMX=true;if(v.indexOf('sp')>=0||v.indexOf('special')>=0)hasSP=true});
- ks.forEach(function(k){
-  html+='<div style="display:inline-block;vertical-align:top;width:190px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;margin:0 6px 8px 0;background:#fafbfc"><div style="font-weight:700;font-size:13px;text-align:center;margin-bottom:6px;color:#1e293b">'+k+'</div>';
-  diffs.forEach(function(df,di){
-   if((di===3&&!hasMX)||(di===4&&!hasSP))return;
-   var match=null;(d.charts||[]).forEach(function(c){if(c.kMode===k){var v=c.version.toLowerCase();for(var vi=0;vi<df.v.length;vi++)if(v.indexOf(df.v[vi])>=0){match=c;break}}});
-   if(match)html+='<div style="margin:3px 0;padding:4px 10px;border-radius:10px;font-size:12px;'+(df.bg==='rainbow'?'background:linear-gradient(90deg,#ffd4d4,#ffffd4,#d4ffd4,#d4d4ff,#e4d4ff)':('background:'+df.bg))+';color:'+df.fg+'">'+df.k+' '+match.level+'级 键数:'+match.combo+'</div>';
-   else html+='<div style="margin:3px 0;padding:4px 10px;border-radius:10px;font-size:12px;color:#94a3b8">'+df.k+' -</div>'
-  });
-  html+='</div>';
- });
- // mode3
- var m3=(d.charts||[]).filter(function(c){return c.isMode3==='true'});if(m3.length>0){m3.sort(function(a,b){return(+a.level)-(+b.level)});html+='<div style="display:inline-block;vertical-align:top;width:200px;border:1px solid #e2e8f0;border-radius:8px;padding:8px;background:#fafbfc"><div style="font-weight:700;font-size:13px;text-align:center;margin-bottom:6px;color:#1e293b">Catch模式</div>';m3.forEach(function(c,i){var boxStyle=i>=3?'background:linear-gradient(90deg,#ffd4d4,#ffffd4,#d4ffd4,#d4d4ff,#e4d4ff);color:#320064':'background:'+(i===0?'#e6f7e6':i===1?'#fff8e1':'#ffe6e6')+';color:'+(i===0?'#006400':i===1?'#826a00':'#b40000');html+='<div style="margin:3px 0;padding:4px 10px;border-radius:10px;font-size:12px;'+boxStyle+'">'+(c.diffName||'')+' Lv.'+c.level+'</div>'});html+='</div>'}
- mg.innerHTML=html;
-}
-document.getElementById('mWriteBtn').addEventListener('click',async function(){
- if(!mData){toast('请先拖入 MCZ 文件！');return}
- var btn=this;btn.disabled=true;btn.textContent='⏳ 写入中...';
- try{
-  var payload={songName:mData.songName,artist:mData.artist,duration:mData.duration,fileName:mData.fileName,charts:mData.charts||[],selectedImage:mSelImg>=0&&mData.imgTokens?mData.imgTokens[mSelImg]:null};
-  var r=await fetch(API_BASE+'/api/excel/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  var resp=await r.json();
-  if(r.ok)toast('✅ '+resp.msg);
-  else toast('❌ 写入失败')
- }catch(e){toast('❌ 请求失败: '+e.message)}
- btn.disabled=false;btn.textContent='写入 Excel 表格'
-});
-})();
 
 })();
 </script>
