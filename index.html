@@ -103,6 +103,9 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 .tpl-capsule:hover{background:#3b82f6;color:#fff;border-color:#3b82f6}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 28px;border-radius:24px;font-size:13px;z-index:4000;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.show{opacity:1}
+@media(max-width:900px){.a-grid{grid-template-columns:repeat(4,1fr)}.a-card{min-height:140px}}
+@media(max-width:700px){.a-grid{grid-template-columns:repeat(3,1fr)}.a-card{min-height:130px}}
+@media(max-width:480px){.a-grid{grid-template-columns:repeat(2,1fr);gap:8px}.a-card{min-height:120px;padding:8px 6px}.a-card .grp{font-size:12px}.a-card .cnt{font-size:10px}.cal-grid .day{font-size:11px;padding:5px 0}}
 </style>
 </head>
 <body>
