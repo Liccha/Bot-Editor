@@ -317,7 +317,8 @@ loadData();
 
 
 // ==================== 曲库查询 ====================
-var LIB_DATA=[],_libFilter="ALL";
+var LIB_DATA=[],_libFilter="ALL",_DS_CFG={shapes:[],card:{}};
+try{var dc=document.getElementById("dsConfig");if(dc)_DS_CFG=JSON.parse(dc.textContent)}catch(e){}
 async function loadLibrary(){
  document.getElementById("libStats").textContent="Loading...";
  try{
@@ -349,7 +350,7 @@ function renderLibrary(filter){
    Object.keys(tagSet).forEach(function(m){tags+="<span style=\"background:#dbeafe;color:#1e40af\">"+m+"</span>"});
    if(hasCatch2)tags+="<span style=\"background:#fce7f3;color:#9d174d\">Catch</span>";
   }
-  html+="<div class=\"lib-card\" onclick=\"showSongDetail("+i+")\">"+(cov?"<img class=\"cv\" src=\""+cov+"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" onerror=\"this.style.display='none'\">":"")+"<div class=\"na\">"+escHtml(s.name)+"</div><div class=\"ar\">"+escHtml(s.artist||"")+"</div><div class=\"bp\">BPM:"+(s.bpm||"?")+"</div><div class=\"du\">"+s.duration+"</div><div class=\"ch\">"+escHtml((s.charters||[]).join(", "))+"</div><div class=\"ta\">"+tags+"</div></div>";
+  html+="<div class=\"lib-card\" onclick=\"showSongDetail("+i+")\">"+(cov?"<img class=\"cv\" src=\""+cov+"\" loading=\"lazy\" referrerpolicy=\"no-referrer\" onerror=\"this.style.display='none'\">":"")+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>";
   count++;
  }
  document.getElementById("libGrid").innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
@@ -370,25 +371,64 @@ function showSongDetail(idx){
 }
 document.getElementById("libDetail").addEventListener("click",function(e){if(e.target===this)this.classList.remove("show")});
 
-	// ==================== 卡片设计器 (WYSIWYG) ====================
+	// ==================== 卡片设计器 (WYSIWYG v2) ====================
+	// 仅 localhost 显示设计 tab
+	if(location.hostname!=="localhost"){(function(){
+		var b=document.querySelector('[data-tab="design"]');if(b)b.style.display="none";
+		var t=document.getElementById("tabDesign");if(t)t.style.display="none";
+	})();}
+
 	var _ds={
-		card:{w:700,h:110,bg:"rgba(255,255,255,0.85)",brTL:12,brTR:12,brBL:12,brBR:12},
-		cover:{x:14,y:14,w:80,h:80,radius:50,ringW:3,ringColor:"#e2e8f0",shadow:"0 0 0 2px rgba(59,130,246,.15)"},
-		name:{x:110,y:14,font:"默认",size:13,color:"#1e293b",weight:"bold",visible:true,type:"name"},
-		artist:{x:110,y:36,font:"默认",size:11,color:"#64748b",weight:"normal",visible:true,type:"artist"},
-		bpm:{x:110,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,type:"bpm"},
-		duration:{x:180,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,type:"duration"},
-		charters:{x:250,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,type:"charters"},
-		tags:{x:110,y:72,font:"默认",size:9,color:"#1e40af",bg:"#dbeafe",visible:true,type:"tags"}
+		card:{w:700,h:110,bg:"rgba(255,255,255,0.85)",brTL:12,brTR:12,brBL:12,brBR:12,gap:8},
+		cover:{x:14,y:14,w:80,h:80,radius:50,ringW:3,ringColor:"#e2e8f0",shadow:"0 0 0 2px rgba(59,130,246,.15)",visible:true},
+		name:{x:110,y:14,font:"默认",size:13,color:"#1e293b",weight:"bold",visible:true,prefix:"",suffix:""},
+		artist:{x:110,y:36,font:"默认",size:11,color:"#64748b",weight:"normal",visible:true,prefix:"",suffix:""},
+		bpm:{x:110,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,prefix:"BPM:",suffix:""},
+		duration:{x:180,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,prefix:"",suffix:""},
+		charters:{x:250,y:55,font:"默认",size:10,color:"#94a3b8",visible:true,prefix:"",suffix:""},
+		tags:{x:110,y:72,font:"默认",size:9,color:"#1e40af",bg:"#dbeafe",visible:true,tagFont:"默认",tagSize:9,tagColor:"#1e40af",tagBg:"#dbeafe"},
+		shapes:[]
 	};
 	var _dsSel=null,_dsDragType="",_dsStartX=0,_dsStartY=0,_dsOrig={},_dsFonts=[],_dsSaving=false;
+
 	(function initDesigner2(){
 		if(!document.querySelector('[data-tab="design"]'))return;
+		if(location.hostname!=="localhost")return;
 		var API=API_BASE+"/api/design/save";
 		var card=document.getElementById("dsCard");
 		var elList=document.getElementById("dsElList"),props=document.getElementById("dsProps");
 
 		fetch(API_BASE+"/api/fonts/list").then(function(r){return r.json()}).then(function(f){_dsFonts=f}).catch(function(){});
+
+		function readCSS(){
+			try{var s=document.styleSheets;for(var i=0;i<s.length;i++){
+				try{var r=s[i].cssRules||s[i].rules;if(!r)continue}catch(e){continue}
+				for(var j=0;j<r.length;j++){
+					var t=r[j].selectorText,st=r[j].style;
+					if(t===".lib-card"){
+						_ds.card.w=parseInt(st.width)||700;_ds.card.h=parseInt(st.minHeight)||110;
+						_ds.card.bg=st.background||"rgba(255,255,255,0.85)";
+						var br=st.borderRadius||"12px";var brs=br.split(" ");_ds.card.brTL=parseInt(brs[0])||12;_ds.card.brTR=parseInt(brs[1])||12;_ds.card.brBR=parseInt(brs[2])||12;_ds.card.brBL=parseInt(brs[3]||brs[0])||12;
+					}
+					if(t===".lib-grid"){_ds.card.gap=parseInt(st.gap)||8}
+					if(t===".lib-card .cv"){
+						_ds.cover.x=parseInt(st.left)||14;_ds.cover.y=parseInt(st.top)||14;_ds.cover.w=parseInt(st.width)||80;_ds.cover.h=parseInt(st.height)||80;
+						_ds.cover.radius=parseInt(st.borderRadius)||50;_ds.cover.ringW=parseInt(st.borderWidth)||3;_ds.cover.ringColor=st.borderColor||"#e2e8f0";_ds.cover.shadow=st.boxShadow||"0 0 0 2px rgba(59,130,246,.15)";
+						_ds.cover.visible=st.display!=="none";
+					}
+					["na","ar","bp","du","ch","ta"].forEach(function(cls,i){
+						var keys=["name","artist","bpm","duration","charters","tags"];
+						if(t===".lib-card ."+cls){
+							var k=keys[i];_ds[k].x=parseInt(st.left)||_ds[k].x;_ds[k].y=parseInt(st.top)||_ds[k].y;
+							_ds[k].size=parseInt(st.fontSize)||_ds[k].size;_ds[k].color=st.color||_ds[k].color;
+							_ds[k].font=(st.fontFamily||"inherit").replace(/['"]/g,"");if(_ds[k].font==="inherit")_ds[k].font="默认";
+							_ds[k].weight=st.fontWeight||"normal";_ds[k].visible=st.display!=="none";
+						}
+					});
+				}
+			}}catch(e){}
+		}
+		readCSS();
 
 		function cardCSS(){
 			return "width:"+_ds.card.w+"px;height:"+_ds.card.h+"px;background:"+_ds.card.bg
@@ -398,11 +438,22 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 		function buildPreview(){
 			card.style.cssText=cardCSS();
 			card.innerHTML="";
+			// Corner handles
 			["TL","TR","BL","BR"].forEach(function(c){
 				var h=document.createElement("div");h.className="ds-corner-handle";h.dataset.corner=c;
 				h.addEventListener("mousedown",function(e){startDrag(e,"corner_"+c)});
 				card.appendChild(h);
 			});
+			// Shapes (background layer first)
+			(_ds.shapes||[]).forEach(function(sh,i){
+				var z=sh.zIndex||0;if(z>0)return; // render positive z later
+				var d=document.createElement("div");d.className="ds-el ds-shape";d.dataset.el="shape_"+i;
+				d.style.cssText="left:"+sh.x+"px;top:"+sh.y+"px;width:"+sh.w+"px;height:"+sh.h+"px;background:"+(sh.color||"#e2e8f0")+";opacity:"+(sh.opacity||1)+";z-index:"+z;
+				if(sh.type==="circle")d.style.cssText+=";border-radius:50%";else if(sh.radius)d.style.cssText+=";border-radius:"+sh.radius+"px";
+				d.addEventListener("mousedown",function(e){e.stopPropagation();selectEl("shape_"+i);startDrag(e,"move_shape")});
+				card.appendChild(d);
+			});
+			// Cover
 			if(_ds.cover.visible!==false){
 				var w=document.createElement("div");w.className="ds-el-cover";
 				w.style.cssText="left:"+_ds.cover.x+"px;top:"+_ds.cover.y+"px;width:"+_ds.cover.w+"px;height:"+_ds.cover.h+"px";
@@ -415,13 +466,31 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 				w.addEventListener("mousedown",function(e){if(e.target===img||e.target===w){selectEl("cover");startDrag(e,"move_cover")}});
 				card.appendChild(w);
 			}
-			var sample={name:"踏上旅途 (Take the Journey)",artist:"HOYO-MiX",bpm:"BPM:128",duration:"02:14",charters:"谱师A, 谱师B",tags:"4K 5K"};
+			// Shapes (foreground layer)
+			(_ds.shapes||[]).forEach(function(sh,i){
+				if((sh.zIndex||0)<=0)return;
+				var d=document.createElement("div");d.className="ds-el ds-shape";d.dataset.el="shape_"+i;
+				d.style.cssText="left:"+sh.x+"px;top:"+sh.y+"px;width:"+sh.w+"px;height:"+sh.h+"px;background:"+(sh.color||"#e2e8f0")+";opacity:"+(sh.opacity||1)+";z-index:"+sh.zIndex;
+				if(sh.type==="circle")d.style.cssText+=";border-radius:50%";else if(sh.radius)d.style.cssText+=";border-radius:"+sh.radius+"px";
+				d.addEventListener("mousedown",function(e){e.stopPropagation();selectEl("shape_"+i);startDrag(e,"move_shape")});
+				card.appendChild(d);
+			});
+			// Text elements
 			["name","artist","bpm","duration","charters","tags"].forEach(function(t){
 				if(_ds[t].visible===false)return;
 				var el=document.createElement("div");el.className="ds-el";el.dataset.el=t;
+				var prefix=_ds[t].prefix||"",suffix=_ds[t].suffix||"";
+				var sample={name:"踏上旅途 (Take the Journey)",artist:"HOYO-MiX",bpm:"128",duration:"02:14",charters:"谱师A, 谱师B",tags:""}[t];
 				el.style.cssText="left:"+_ds[t].x+"px;top:"+_ds[t].y+"px;font-family:"+(_ds[t].font==="默认"?"inherit":_ds[t].font)+";font-size:"+_ds[t].size+"px;color:"+_ds[t].color+";font-weight:"+(_ds[t].weight||"normal");
-				if(t==="tags")el.style.cssText+=";background:"+(_ds[t].bg||"#dbeafe")+";padding:1px 6px;border-radius:4px";
-				el.textContent=sample[t]||t;
+				if(t==="tags"){
+					el.style.cssText+=";background:"+(_ds[t].bg||"#dbeafe")+";padding:1px 6px;border-radius:4px";
+				}
+				if(t==="tags"){
+					var tf=_ds[t].tagFont==="默认"?"inherit":_ds[t].tagFont;
+					el.textContent="4K 5K";
+				}else{
+					el.textContent=prefix+sample+suffix;
+				}
 				el.addEventListener("mousedown",function(e){e.stopPropagation();selectEl(t);startDrag(e,"move_el")});
 				card.appendChild(el);
 			});
@@ -430,8 +499,11 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 
 		function selectEl(name){
 			_dsSel=name;
-			card.querySelectorAll(".ds-el,.ds-el-cover").forEach(function(el){el.classList.remove("selected")});
-			if(name==="cover"){var c=card.querySelector(".ds-el-cover");if(c)c.classList.add("selected")}
+			card.querySelectorAll(".ds-el,.ds-el-cover,.ds-shape").forEach(function(el){el.classList.remove("selected")});
+			if(name&&name.startsWith("shape_")){
+				var idx=parseInt(name.split("_")[1]);
+				card.querySelectorAll(".ds-shape").forEach(function(el,i){if(i===idx)el.classList.add("selected")});
+			}else if(name==="cover"){var c=card.querySelector(".ds-el-cover");if(c)c.classList.add("selected")}
 			else if(name){var e=card.querySelector('.ds-el[data-el="'+name+'"]');if(e)e.classList.add("selected")}
 			buildElList();buildProps();
 		}
@@ -441,8 +513,15 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 			[{id:"cover",label:"封面",color:"#f59e0b"},{id:"name",label:"歌曲名",color:_ds.name.color},{id:"artist",label:"作者",color:_ds.artist.color},{id:"bpm",label:"BPM",color:_ds.bpm.color},{id:"duration",label:"时长",color:_ds.duration.color},{id:"charters",label:"谱师",color:_ds.charters.color},{id:"tags",label:"标签",color:_ds.tags.color}].forEach(function(it){
 				h+='<div class="el-row'+(it.id===_dsSel?' sel':'')+'" data-el="'+it.id+'"><div class="dot" style="background:'+it.color+'"></div> '+it.label+' '+(it.id==="cover"?"":'<span style="font-size:9px;color:#94a3b8">'+(it.id==="name"?_ds[it.id].font+" "+_ds[it.id].size+"px":_ds[it.id].visible===false?"隐藏":"✓")+'</span>')+'</div>';
 			});
+			(_ds.shapes||[]).forEach(function(sh,i){
+				h+='<div class="el-row'+("shape_"+i===_dsSel?' sel':'')+'" data-el="shape_'+i+'"><div class="dot" style="background:'+(sh.color||"#e2e8f0")+'"></div> 图形'+(i+1)+' <span style="font-size:9px;color:#94a3b8">'+(sh.type||"rect")+'</span></div>';
+			});
+			h+='<div class="el-row" style="color:#3b82f6" data-el="new_shape">+ 新增图形</div>';
 			elList.innerHTML=h;
-			elList.querySelectorAll(".el-row").forEach(function(r){r.addEventListener("click",function(){selectEl(this.dataset.el||null)})});
+			elList.querySelectorAll(".el-row").forEach(function(r){r.addEventListener("click",function(){
+				if(this.dataset.el==="new_shape"){_ds.shapes.push({type:"rect",x:10,y:10,w:60,h:40,color:"#e2e8f0",opacity:1,zIndex:0,radius:4});selectEl("shape_"+(+_ds.shapes.length-1))}
+				else selectEl(this.dataset.el||null);
+			})});
 		}
 
 		function buildProps(){
@@ -450,21 +529,34 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 			if(!n){
 				props.innerHTML="<h3>卡片属性</h3>"
 					+pr("宽度","card.w",200,1200)+pr("高度","card.h",40,200)
+					+pr("卡片间距","card.gap",2,40)
 					+pr("圆角TL","card.brTL",0,60)+pr("圆角TR","card.brTR",0,60)
 					+pr("圆角BL","card.brBL",0,60)+pr("圆角BR","card.brBR",0,60);
 			}else if(n==="cover"){
 				props.innerHTML="<h3>封面属性</h3>"
-					+pr("X位置","cover.x",-40,200)+pr("Y位置","cover.y",-40,80)
+					+pch("封面可见","cover.visible")+pr("X位置","cover.x",-40,200)+pr("Y位置","cover.y",-40,80)
 					+pr("宽度","cover.w",30,200)+pr("高度","cover.h",30,200)
 					+pr("圆角%","cover.radius",0,50)+pr("边框粗细","cover.ringW",0,10)
 					+pc("边框颜色","cover.ringColor")+pi("光晕CSS","cover.shadow");
+			}else if(n&&n.startsWith("shape_")){
+				var idx=parseInt(n.split("_")[1]);var sh=_ds.shapes[idx];if(!sh)return;
+				props.innerHTML="<h3>图形"+(idx+1)+" 属性</h3>"
+					+ps3("形状类型","shape_type_"+idx,[["rect","矩形"],["circle","圆形"]],sh.type||"rect")
+					+pr2("X位置","shape_x_"+idx,-100,800,sh.x)+pr2("Y位置","shape_y_"+idx,-100,400,sh.y)
+					+pr2("宽度","shape_w_"+idx,10,400,sh.w)+pr2("高度","shape_h_"+idx,10,400,sh.h)
+					+pc2("填充色","shape_color_"+idx,sh.color||"#e2e8f0")
+					+pr2("透明度","shape_opacity_"+idx,0,100,Math.round((sh.opacity||1)*100))
+					+pr2("圆角","shape_radius_"+idx,0,200,sh.radius||0)
+					+pr2("层级","shape_z_"+idx,-5,20,sh.zIndex||0)
+					+'<div class="ds-prop"><button class="btn secondary" id="dsDelShape" style="width:100%;font-size:11px;padding:4px">删除此图形</button></div>';
 			}else{
 				var labels={name:"歌曲名",artist:"作者",bpm:"BPM",duration:"时长",charters:"谱师",tags:"标签"};
 				props.innerHTML="<h3>"+labels[n]+" 属性</h3>"
 					+pch(n+"可见",n+".visible")+pr("X位置",n+".x",-100,800)+pr("Y位置",n+".y",-40,180)
 					+pr("字号",n+".size",8,36)+pc("颜色",n+".color");
 				if(n!=="tags"){props.innerHTML+=ps("字体",n+".font");props.innerHTML+=ps2("粗细",n+".weight")}
-				else{props.innerHTML+=pc("背景色",n+".bg")}
+				else{props.innerHTML+=pc("标签背景色",n+".bg");props.innerHTML+=ps("标签字体",n+".tagFont");props.innerHTML+=pr("标签字号",n+".tagSize",6,20);props.innerHTML+=pc("标签字色",n+".tagColor")}
+				props.innerHTML+=pi((n==="tags"?"":"前")+"缀文字",n+".prefix")+pi((n==="tags"?"":"后")+"缀文字",n+".suffix");
 			}
 			bindPropEvents();
 		}
@@ -472,47 +564,61 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 		function getVal(path){var p=path.split(".");var o=_ds;for(var i=1;i<p.length;i++){o=o[p[i]];if(o===undefined)return""}return o}
 		function setVal(path,val){var p=path.split(".");var o=_ds;for(var i=1;i<p.length-1;i++)o=o[p[i]];o[p[p.length-1]]=val}
 
-		function pr(label,id,min,max){
-			var path="_ds."+id,v=getVal(path),vid=id.replace(".","_");
-			return '<div class="ds-prop"><label>'+label+' <span class="val" id="dsv_'+vid+'">'+v+'</span></label><input type="range" data-path="'+path+'" min="'+min+'" max="'+max+'" value="'+v+'"></div>';
-		}
-		function pc(label,id){
-			return '<div class="ds-prop"><div class="row"><label style="flex:1">'+label+'</label><input type="color" data-path="_ds.'+id+'" value="'+getVal("_ds."+id)+'"></div></div>';
-		}
-		function pi(label,id){
-			return '<div class="ds-prop"><label>'+label+'</label><input type="text" data-path="_ds.'+id+'" value="'+String(getVal("_ds."+id)).replace(/"/g,"&quot;")+'" style="width:100%;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;padding:2px 4px"></div>';
-		}
-		function ps(label,id){
-			var h="<div class='ds-prop'><label>"+label+"</label><select data-path='_ds."+id+"'><option value='默认'>默认</option>";
-			_dsFonts.forEach(function(f){h+="<option value='"+f.name+"'>"+f.name+"</option>"});
-			h+="</select></div>";return h;
-		}
-		function ps2(label,id){
-			var h="<div class='ds-prop'><label>"+label+"</label><select data-path='_ds."+id+"'>";
-			[["normal","正常"],["bold","粗体"],["300","细体"]].forEach(function(o){h+="<option value='"+o[0]+"'>"+o[1]+"</option>"});
-			h+="</select></div>";return h;
-		}
-		function pch(label,id){
-			var name=id.split(".")[0];
-			return '<div class="ds-prop"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-path="_ds.'+id+'" '+(getVal("_ds."+name+".visible")!==false?"checked":"")+'> '+label+'</label></div>';
-		}
+		function pr(label,id,min,max){var path="_ds."+id,v=getVal(path),vid=id.replace(/\./g,"_");return '<div class="ds-prop"><label>'+label+' <span class="val" id="dsv_'+vid+'">'+v+'</span></label><input type="range" data-path="'+path+'" min="'+min+'" max="'+max+'" value="'+v+'"></div>'}
+		function pr2(label,id,min,max,val){return '<div class="ds-prop"><label>'+label+' <span class="val" id="dsv_'+id+'">'+val+'</span></label><input type="range" data-sid="'+id+'" min="'+min+'" max="'+max+'" value="'+val+'"></div>'}
+		function pc(label,id){return '<div class="ds-prop"><div class="row"><label style="flex:1">'+label+'</label><input type="color" data-path="_ds.'+id+'" value="'+getVal("_ds."+id)+'"></div></div>'}
+		function pc2(label,id,val){return '<div class="ds-prop"><div class="row"><label style="flex:1">'+label+'</label><input type="color" data-sid="'+id+'" value="'+val+'"></div></div>'}
+		function pi(label,id){return '<div class="ds-prop"><label>'+label+'</label><input type="text" data-path="_ds.'+id+'" value="'+String(getVal("_ds."+id)).replace(/"/g,"&quot;")+'" style="width:100%;font-size:11px;border:1px solid #cbd5e1;border-radius:4px;padding:2px 4px"></div>'}
+		function ps(label,id){var h="<div class='ds-prop'><label>"+label+"</label><select data-path='_ds."+id+"'><option value='默认'>默认</option>";_dsFonts.forEach(function(f){h+="<option value='"+f.name+"'>"+f.name+"</option>"});h+="</select></div>";return h}
+		function ps2(label,id){var h="<div class='ds-prop'><label>"+label+"</label><select data-path='_ds."+id+"'>";[["normal","正常"],["bold","粗体"],["300","细体"]].forEach(function(o){h+="<option value='"+o[0]+"'>"+o[1]+"</option>"});h+="</select></div>";return h}
+		function ps3(label,id,opts,val){var h="<div class='ds-prop'><label>"+label+"</label><select data-sid='"+id+"'>";opts.forEach(function(o){h+="<option value='"+o[0]+"'"+(o[0]===val?" selected":"")+">"+o[1]+"</option>"});h+="</select></div>";return h}
+		function pch(label,id){var name=id.split(".")[0];return '<div class="ds-prop"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-path="_ds.'+id+'" '+(getVal("_ds."+name+".visible")!==false?"checked":"")+'> '+label+'</label></div>'}
 
 		function bindPropEvents(){
 			props.querySelectorAll("input[type=range]").forEach(function(el){
-				var path=el.dataset.path,id=path.replace("_ds.","").replace(".","_"),vid=document.getElementById("dsv_"+id);
-				if(vid)vid.textContent=getVal(path);
-				el.addEventListener("input",function(){setVal(path,parseInt(this.value));if(vid)vid.textContent=this.value;buildPreview()});
+				var path=el.dataset.path,sid=el.dataset.sid;
+				if(path){
+					var vid=document.getElementById("dsv_"+path.replace("_ds.","").replace(/\./g,"_"));
+					if(vid)vid.textContent=getVal(path);
+					el.addEventListener("input",function(){setVal(path,parseInt(this.value));if(vid)vid.textContent=this.value;buildPreview()});
+				}else if(sid){
+					el.addEventListener("input",function(){handleShapeProp(sid,parseInt(this.value));buildPreview()});
+				}
 			});
-			props.querySelectorAll("input[type=color]").forEach(function(el){el.addEventListener("input",function(){setVal(this.dataset.path,this.value);buildPreview()})});
-			props.querySelectorAll("input[type=text]").forEach(function(el){el.addEventListener("input",function(){setVal(this.dataset.path,this.value);buildPreview()})});
-			props.querySelectorAll("select").forEach(function(el){el.addEventListener("change",function(){setVal(this.dataset.path,this.value);buildPreview()})});
-			props.querySelectorAll("input[type=checkbox]").forEach(function(el){el.addEventListener("change",function(){setVal(this.dataset.path,this.checked);buildPreview()})});
+			props.querySelectorAll("input[type=color]").forEach(function(el){
+				if(el.dataset.path)el.addEventListener("input",function(){setVal(this.dataset.path,this.value);buildPreview()});
+				else if(el.dataset.sid)el.addEventListener("input",function(){handleShapeProp(this.dataset.sid,this.value);buildPreview()});
+			});
+			props.querySelectorAll("input[type=text]").forEach(function(el){
+				el.addEventListener("input",function(){setVal(this.dataset.path,this.value);buildPreview()});
+			});
+			props.querySelectorAll("select").forEach(function(el){
+				if(el.dataset.path)el.addEventListener("change",function(){setVal(this.dataset.path,this.value);buildPreview()});
+				else if(el.dataset.sid)el.addEventListener("change",function(){handleShapeProp(this.dataset.sid,this.value);buildPreview()});
+			});
+			props.querySelectorAll("input[type=checkbox]").forEach(function(el){
+				el.addEventListener("change",function(){setVal(this.dataset.path,this.checked);buildPreview()});
+			});
+			var db=document.getElementById("dsDelShape");if(db)db.addEventListener("click",function(){
+				var m=_dsSel.match(/^shape_(\d+)$/);if(m){_ds.shapes.splice(parseInt(m[1]),1);selectEl(null)}
+			});
+		}
+
+		function handleShapeProp(sid,val){
+			var m=sid.match(/^shape_(.+)_(\d+)$/);if(!m)return;
+			var key=m[1],idx=parseInt(m[2]);if(!_ds.shapes[idx])return;
+			if(key==="opacity")_ds.shapes[idx][key]=val/100;
+			else if(key==="x"||key==="y"||key==="w"||key==="h"||key==="z"||key==="radius")_ds.shapes[idx][key]=parseInt(val);
+			else _ds.shapes[idx][key]=val;
 		}
 
 		function startDrag(e,type){
 			e.preventDefault();_dsDragType=type;_dsStartX=e.clientX;_dsStartY=e.clientY;
 			if(type==="move_el"&&_dsSel){_dsOrig.x=getVal("_ds."+_dsSel+".x");_dsOrig.y=getVal("_ds."+_dsSel+".y")}
 			else if(type==="move_cover"){_dsOrig.x=_ds.cover.x;_dsOrig.y=_ds.cover.y}
+			else if(type==="move_shape"&&_dsSel){
+				var m=_dsSel.match(/^shape_(\d+)$/);if(m){var sh=_ds.shapes[parseInt(m[1])];_dsOrig.x=sh.x;_dsOrig.y=sh.y}
+			}
 			else if(type.startsWith("corner_")){var c=type.split("_")[1];["TL","TR","BL","BR"].forEach(function(x){_dsOrig["br"+x]=_ds.card["br"+x]})}
 		}
 
@@ -521,21 +627,15 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 			var dx=e.clientX-_dsStartX,dy=e.clientY-_dsStartY;
 			if(_dsDragType==="move_el"){setVal("_ds."+_dsSel+".x",Math.round(_dsOrig.x+dx));setVal("_ds."+_dsSel+".y",Math.round(_dsOrig.y+dy))}
 			else if(_dsDragType==="move_cover"){_ds.cover.x=Math.round(_dsOrig.x+dx);_ds.cover.y=Math.round(_dsOrig.y+dy)}
+			else if(_dsDragType==="move_shape"){var m=_dsSel.match(/^shape_(\d+)$/);if(m){_ds.shapes[parseInt(m[1])].x=Math.round(_dsOrig.x+dx);_ds.shapes[parseInt(m[1])].y=Math.round(_dsOrig.y+dy)}}
 			else if(_dsDragType.startsWith("corner_")){var c=_dsDragType.split("_")[1],nv=_dsOrig["br"+c]+Math.round((Math.abs(dx)>Math.abs(dy)?dx:dy)/2);nv=Math.max(0,Math.min(60,nv));_ds.card["br"+c]=nv}
 			buildPreview();
 		});
 		document.addEventListener("mouseup",function(){_dsDragType=""});
 
 		var _loadedFonts={};
-		function loadFont(name){
-			if(_loadedFonts[name]||name==="默认")return;
-			_loadedFonts[name]=true;
-			var f=_dsFonts.find(function(x){return x.name===name});if(!f)return;
-			var s=document.createElement("style");
-			s.textContent="@font-face{font-family:'"+name+"';src:url('"+API_BASE+"/api/fonts/file?"+f.file+"') format('"+(f.file.endsWith(".ttf")?"truetype":"opentype")+"')}";
-			document.head.appendChild(s);
-		}
-		var _origBP=buildProps;buildProps=function(){_origBP();if(_dsSel&&_dsSel!=="cover"&&_dsSel!=="tags"){var fn=getVal("_ds."+_dsSel+".font");if(fn&&fn!=="默认")loadFont(fn)}};
+		function loadFont(name){if(_loadedFonts[name]||name==="默认")return;_loadedFonts[name]=true;var f=_dsFonts.find(function(x){return x.name===name});if(!f)return;var s=document.createElement("style");s.textContent="@font-face{font-family:'"+name+"';src:url('"+API_BASE+"/api/fonts/file?"+f.file+"') format('"+(f.file.endsWith(".ttf")?"truetype":"opentype")+"')}";document.head.appendChild(s)}
+		var _origBP=buildProps;buildProps=function(){_origBP();if(_dsSel&&_dsSel!=="cover"&&!_dsSel.startsWith("shape_")&&_dsSel!=="tags"){var fn=getVal("_ds."+_dsSel+".font");if(fn&&fn!=="默认")loadFont(fn)}if(_dsSel==="tags"){var tfn=getVal("_ds.tags.tagFont");if(tfn&&tfn!=="默认")loadFont(tfn)}};
 
 		function dsToast(msg){var t=document.getElementById("dsToast");t.textContent=msg;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},2000)}
 
@@ -545,17 +645,27 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 			var css="";
 			css+=".lib-card{position:relative;background:"+_ds.card.bg+";border-radius:"+_ds.card.brTL+"px "+_ds.card.brTR+"px "+_ds.card.brBR+"px "+_ds.card.brBL+"px;border:1px solid #e2e8f0;padding:0;display:block;cursor:pointer;transition:all .15s;min-height:"+_ds.card.h+"px}\n";
 			css+=".lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}\n";
-			if(_ds.cover.visible!==false){
-				css+=".lib-card .cv{position:absolute;left:"+_ds.cover.x+"px;top:"+_ds.cover.y+"px;width:"+_ds.cover.w+"px;height:"+_ds.cover.h+"px;object-fit:cover;border-radius:"+_ds.cover.radius+"%;border:"+_ds.cover.ringW+"px solid "+_ds.cover.ringColor+";box-shadow:"+_ds.cover.shadow+";flex-shrink:0}\n";
-			}
+			css+=".lib-grid{gap:"+_ds.card.gap+"px}\n";
+			// Cover - always output, use display to hide
+			css+=".lib-card .cv{position:absolute;left:"+_ds.cover.x+"px;top:"+_ds.cover.y+"px;width:"+_ds.cover.w+"px;height:"+_ds.cover.h+"px;object-fit:cover;border-radius:"+_ds.cover.radius+"%;border:"+_ds.cover.ringW+"px solid "+_ds.cover.ringColor+";box-shadow:"+_ds.cover.shadow+";flex-shrink:0"+(typeof _ds.cover.visible==="boolean"&&!_ds.cover.visible?";display:none":"")+"}\n";
+			// Text elements - always output, hidden ones get display:none
 			["name","artist","bpm","duration","charters","tags"].forEach(function(t){
-				if(_ds[t].visible===false)return;
 				var cls=t.substring(0,2);var f=_ds[t].font==="默认"?"inherit":"'"+_ds[t].font+"'";
 				css+=".lib-card ."+cls+"{position:absolute;left:"+_ds[t].x+"px;top:"+_ds[t].y+"px;font-family:"+f+";font-size:"+_ds[t].size+"px;color:"+_ds[t].color+";font-weight:"+(_ds[t].weight||"normal")+";white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
 				if(t==="tags")css+=";background:"+(_ds[t].bg||"#dbeafe")+";padding:1px 6px;border-radius:4px";
+				if(_ds[t].visible===false)css+=";display:none";
 				css+="}\n";
 			});
-			fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({css:css,maxWidth:_ds.card.w+40})}).then(function(r){
+			// Tag badge fonts
+			var tf=_ds.tags.tagFont==="默认"?"inherit":"'"+_ds.tags.tagFont+"'";
+			css+=".lib-card .ta span{font-family:"+tf+";font-size:"+_ds.tags.tagSize+"px;color:"+_ds.tags.tagColor+"}\n";
+			// Shapes
+			(_ds.shapes||[]).forEach(function(sh,i){
+				css+=".lib-card .sh"+i+"{position:absolute;left:"+sh.x+"px;top:"+sh.y+"px;width:"+sh.w+"px;height:"+sh.h+"px;background:"+(sh.color||"#e2e8f0")+";opacity:"+(sh.opacity||1)+";z-index:"+(sh.zIndex||0);
+				if(sh.type==="circle")css+=";border-radius:50%";else if(sh.radius)css+=";border-radius:"+sh.radius+"px";
+				css+="}\n";
+			});
+			fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({css:css,maxWidth:_ds.card.w+40,config:JSON.stringify({shapes:_ds.shapes,name:{prefix:_ds.name.prefix,suffix:_ds.name.suffix},artist:{prefix:_ds.artist.prefix,suffix:_ds.artist.suffix},bpm:{prefix:_ds.bpm.prefix,suffix:_ds.bpm.suffix},duration:{prefix:_ds.duration.prefix,suffix:_ds.duration.suffix},charters:{prefix:_ds.charters.prefix,suffix:_ds.charters.suffix}})})}).then(function(r){
 				if(r.ok){dsToast("已注入! 刷新曲库页查看效果")}else{dsToast("保存失败")}
 				btn.disabled=false;btn.textContent="注入保存";_dsSaving=false;
 			}).catch(function(){dsToast("保存失败");btn.disabled=false;btn.textContent="注入保存";_dsSaving=false});
@@ -565,7 +675,9 @@ document.getElementById("libDetail").addEventListener("click",function(e){if(e.t
 		document.querySelector('[data-tab="design"]').addEventListener("click",function(){buildPreview();buildElList();buildProps()});
 	})();
 
+
 })();
 </script>
+<script id="dsConfig" type="application/json">{}</script>
 </body>
 </html>
