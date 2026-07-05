@@ -80,6 +80,7 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 .btn-row .btn{padding:8px 24px;border-radius:10px;border:none;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600}
 .tpl-capsule{display:inline-block;padding:3px 12px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid #cbd5e1;background:#f8fafc;color:#475569;transition:all .15s}
 .tpl-capsule:hover{background:#3b82f6;color:#fff;border-color:#3b82f6}
+.tpl-capsule.active{background:#3b82f6;color:#fff;border-color:#3b82f6}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 28px;border-radius:24px;font-size:13px;z-index:4000;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.show{opacity:1}
 @media(max-width:900px){.a-grid{grid-template-columns:repeat(4,1fr)}.a-card{min-height:140px}}
@@ -145,8 +146,11 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('bg.png') c
 <!-- ==================== 曲库查询 ==================== -->
 <div class="tab-content" id="tabLibrary">
 <div style="padding:20px;max-width:1100px;margin:0 auto;width:100%">
-<h1 style="text-align:center;color:#1e293b;font-size:20px;margin-bottom:12px">曲库查询</h1>
-<input class="lib-search" id="libSearch" placeholder="搜索歌曲名、作者、谱师..." autocomplete="off">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+<div style="display:flex;gap:6px;flex-wrap:wrap" id="libFilters"><span class="tpl-capsule active" data-flt="ALL">ALL</span><span class="tpl-capsule" data-flt="4K">4键</span><span class="tpl-capsule" data-flt="5K">5键</span><span class="tpl-capsule" data-flt="6K">6键</span><span class="tpl-capsule" data-flt="Catch">Catch</span></div>
+<div style="flex:1"></div>
+<input class="lib-search" id="libSearch" placeholder="搜索..." autocomplete="off" style="margin:0;max-width:220px">
+</div>
 <div class="lib-stats" id="libStats"></div>
 <div class="lib-grid" id="libGrid"></div>
 </div>
@@ -247,7 +251,7 @@ loadData();
 
 
 // ==================== 曲库查询 ====================
-var LIB_DATA=[];
+var LIB_DATA=[],_libFilter="ALL";
 async function loadLibrary(){
  document.getElementById("libStats").textContent="Loading...";
  try{
@@ -266,6 +270,7 @@ function renderLibrary(filter){
  for(var i=0;i<LIB_DATA.length;i++){
   var s=LIB_DATA[i];
   if(s.albumDate&&s.albumDate>today){hidden++;continue}
+  if(_libFilter!=="ALL"){var hasMode=false;(s.charts||[]).forEach(function(c){if(_libFilter==="Catch"){if(c.isMode3||c.mode==="CATCH")hasMode=true}else{if(c.mode===_libFilter)hasMode=true}});if(!hasMode){hidden++;continue}}
   if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
   var cov=s.cover||"";
   var tags="";
@@ -278,8 +283,9 @@ function renderLibrary(filter){
  }
  document.getElementById("libGrid").innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
  var total=LIB_DATA.length-hidden;
- document.getElementById("libStats").textContent=(filter?"Found "+count+"/"+total:(hidden?"Showing "+total+" songs ("+hidden+" locked)":total+" songs"));
+ document.getElementById("libStats").textContent=(filter?"Found "+count+"/"+total:total+" songs");
 }
+document.getElementById("libFilters").addEventListener("click",function(e){if(e.target.dataset.flt){_libFilter=e.target.dataset.flt;document.querySelectorAll("#libFilters span").forEach(function(s){s.classList.remove("active")});e.target.classList.add("active");renderLibrary(document.getElementById("libSearch").value)}});
 document.getElementById("libSearch").addEventListener("input",function(){renderLibrary(this.value)});
 function showSongDetail(idx){
  var s=LIB_DATA[idx];if(!s)return;
