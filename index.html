@@ -431,6 +431,7 @@ function uploadFile(file,onDone,onProgress,ftype){
  xhr.setRequestHeader('X-Filename',encodeURIComponent(file.name));
  xhr.setRequestHeader('X-Session',_session);
  xhr.setRequestHeader('X-Type',ftype||'attach');
+ xhr.setRequestHeader('X-Admin-Device',_deviceId());
  xhr.upload.onprogress=function(e){if(e.lengthComputable&&onProgress)onProgress(Math.round(e.loaded*100/e.total))};
  xhr.onload=function(){if(xhr.status===200){try{var j=JSON.parse(xhr.responseText);onDone(j.token)}catch(ex){onDone(null)}}else{onDone(null)}};
  xhr.onerror=function(){onDone(null)};
@@ -444,19 +445,19 @@ fz.addEventListener('dragover',function(e){e.preventDefault();fz.classList.add('
 fz.addEventListener('dragleave',function(){fz.classList.remove('drag')});
 fz.addEventListener('drop',function(e){e.preventDefault();fz.classList.remove('drag');addFiles(e.dataTransfer.files)});
 function addFiles(fl){for(var i=0;i<fl.length;i++){(function(f){var item={name:f.name,xhr:true,progress:0};_files.push(item);item.xhr=uploadFile(f,function(token){if(token){item.token=token;item.progress=100;item.xhr=null}else{item.error=true;item.xhr=null}renderAttach()},function(p){item.progress=p;renderAttach()},'attach');renderAttach()})(fl[i])}}
-function renderAttach(){var u=document.getElementById('attachList');u.innerHTML='';_files.forEach(function(f,i){var li=document.createElement('li');var bar=f.xhr?'<progress value="'+f.progress+'" max="100" style="width:50px;height:6px;vertical-align:middle;margin-right:4px;accent-color:#3b82f6"></progress> '+f.progress+'%':'';li.innerHTML=(f.error?'❌ ':'')+escHtml(f.name)+' '+bar;li.onclick=function(){if(f.xhr&&f.xhr.abort){f.xhr.abort();f.xhr=null}if(f.token){var fn=f.token.split('/').pop();fetch(UPLOAD_API,{method:'DELETE',headers:{'X-Session':_session,'X-Filename':encodeURIComponent(fn||f.name)}})}_files.splice(i,1);renderAttach()};if(f.error)li.style.color='#ef4444';else if(f.xhr)li.style.color='#3b82f6';u.appendChild(li)})}
+function renderAttach(){var u=document.getElementById('attachList');u.innerHTML='';_files.forEach(function(f,i){var li=document.createElement('li');var bar=f.xhr?'<progress value="'+f.progress+'" max="100" style="width:50px;height:6px;vertical-align:middle;margin-right:4px;accent-color:#3b82f6"></progress> '+f.progress+'%':'';li.innerHTML=(f.error?'❌ ':'')+escHtml(f.name)+' '+bar;li.onclick=function(){if(f.xhr&&f.xhr.abort){f.xhr.abort();f.xhr=null}if(f.token){var fn=f.token.split('/').pop();fetch(UPLOAD_API,{method:'DELETE',headers:adminHeaders({'X-Session':_session,'X-Filename':encodeURIComponent(fn||f.name)})})}_files.splice(i,1);renderAttach()};if(f.error)li.style.color='#ef4444';else if(f.xhr)li.style.color='#3b82f6';u.appendChild(li)})}
 document.getElementById('fImage').addEventListener('change',function(){var f=this.files[0];if(!f)return;if(f.size>=2*1024*1024){toast('图片不能超过 2 MB！');this.value='';return}document.getElementById('imgName').innerHTML='<progress value="0" max="100" style="width:60px;height:6px;accent-color:#3b82f6;vertical-align:middle;margin-right:4px"></progress>0%';document.getElementById('imgName').style.color='#3b82f6';_imgXhr=uploadFile(f,function(token){_imgData=token;_imgXhr=null;document.getElementById('imgName').innerHTML=f.name;document.getElementById('imgName').style.color='#22c55e'},function(p){document.getElementById('imgName').innerHTML='<progress value="'+p+'" max="100" style="width:60px;height:6px;accent-color:#3b82f6;vertical-align:middle;margin-right:4px"></progress>'+p+'%'},'image');});
 // API
 async function loadData(){var st=document.getElementById('apiStatus');try{st.textContent='⏳ 加载中...';st.style.color='#94a3b8';var r=await fetch(API);if(!r.ok)throw new Error('HTTP '+r.status);data=await r.json();if(!Array.isArray(data)){data=[];throw new Error('非数组')}data.sort(function(a,b){return(a.time||'').localeCompare(b.time||'')});st.textContent='✓ '+data.length+' 条公告';st.style.color='#22c55e'}catch(e){data=[];st.textContent='✗ '+e.message;st.style.color='#ef4444'}renderCards()}
-async function saveData(arr){try{var r=await fetch(API,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(arr)});if(r.ok){data=JSON.parse(JSON.stringify(arr));return true}}catch(e){}return false}
+async function saveData(arr){try{var r=await fetch(API,{method:'PUT',headers:adminHeaders({'Content-Type':'application/json'}),body:JSON.stringify(arr)});if(r.ok){data=JSON.parse(JSON.stringify(arr));return true}}catch(e){}return false}
 // cards
-function renderCards(){var g=document.getElementById('grid'),tp=Math.max(1,Math.ceil((data.length+1)/A_SLOTS));if(page>=tp)page=tp-1;var s=page*A_SLOTS,html='',plusPlaced=false;for(var i=0;i<A_SLOTS;i++){var idx=s+i;if(idx<data.length){var a=data[idx],gr=mapGrp(a.groupId||'?'),cnt=(a.content||'').replace(/\\n/g,' ');if(cnt.length>18)cnt=cnt.slice(0,18)+'...';var st=a.sent==='true'?'<span class="st sent">已发送</span>':'<span class="st pending">待发送</span>';html+='<div class="a-card" data-idx="'+idx+'"><div class="del" data-del="'+idx+'">×</div><div class="grp">'+escHtml(gr)+'</div><div class="tm">'+(a.time||'?')+'</div>'+st+'<div class="cnt">'+escHtml(cnt)+'</div></div>'}else if(!plusPlaced){html+='<div class="a-card add" id="addCard"><div class="plus">+</div></div>';plusPlaced=true}else{html+='<div class="a-card a-card-ghost"></div>'}}g.innerHTML=html;var ac=document.getElementById('addCard');if(ac)ac.addEventListener('click',function(){page=tp-1;openEditor(-1)});var cards=g.querySelectorAll('.a-card[data-idx]');for(var j=0;j<cards.length;j++){(function(idx){cards[j].addEventListener('click',function(e){if(!e.target.classList.contains('del'))openEditor(idx)})})(+cards[j].dataset.idx)}var dels=g.querySelectorAll('.del[data-del]');for(var k=0;k<dels.length;k++){(function(idx){dels[k].addEventListener('click',function(e){e.stopPropagation();var a=data[idx],sess='';if(a.attach){var m=a.attach.match(/^([^|]+)\//);if(m)sess=m[1]}if(!sess&&a.image){var m2=a.image.match(/^([^/]+)\//);if(m2)sess=m2[1]}if(sess)fetch(UPLOAD_API,{method:'DELETE',headers:{'X-Session':sess}});data.splice(idx,1);saveData(data).then(function(){renderCards()})})})(+dels[k].dataset.del)}var pg=document.getElementById('pager');pg.innerHTML='';var pb=document.createElement('button');pb.textContent='← 上一页';if(page>0)pb.addEventListener('click',function(){page--;renderCards()});else pb.disabled=true;var nb=document.createElement('button');nb.textContent='下一页 →';if((page+1)*A_SLOTS<=data.length)nb.addEventListener('click',function(){page++;renderCards()});else nb.disabled=true;var sp=document.createElement('span');sp.textContent='第 '+(page+1)+'/'+tp+' 页 ('+data.length+' 个公告)';pg.appendChild(pb);pg.appendChild(sp);pg.appendChild(nb)}
+function renderCards(){var g=document.getElementById('grid'),tp=Math.max(1,Math.ceil((data.length+1)/A_SLOTS));if(page>=tp)page=tp-1;var s=page*A_SLOTS,html='',plusPlaced=false;for(var i=0;i<A_SLOTS;i++){var idx=s+i;if(idx<data.length){var a=data[idx],gr=mapGrp(a.groupId||'?'),cnt=(a.content||'').replace(/\\n/g,' ');if(cnt.length>18)cnt=cnt.slice(0,18)+'...';var st=a.sent==='true'?'<span class="st sent">已发送</span>':'<span class="st pending">待发送</span>';html+='<div class="a-card" data-idx="'+idx+'"><div class="del" data-del="'+idx+'">×</div><div class="grp">'+escHtml(gr)+'</div><div class="tm">'+(a.time||'?')+'</div>'+st+'<div class="cnt">'+escHtml(cnt)+'</div></div>'}else if(!plusPlaced){html+='<div class="a-card add" id="addCard"><div class="plus">+</div></div>';plusPlaced=true}else{html+='<div class="a-card a-card-ghost"></div>'}}g.innerHTML=html;var ac=document.getElementById('addCard');if(ac)ac.addEventListener('click',function(){page=tp-1;openEditor(-1)});var cards=g.querySelectorAll('.a-card[data-idx]');for(var j=0;j<cards.length;j++){(function(idx){cards[j].addEventListener('click',function(e){if(!e.target.classList.contains('del'))openEditor(idx)})})(+cards[j].dataset.idx)}var dels=g.querySelectorAll('.del[data-del]');for(var k=0;k<dels.length;k++){(function(idx){dels[k].addEventListener('click',function(e){e.stopPropagation();var a=data[idx],sess='';if(a.attach){var m=a.attach.match(/^([^|]+)\//);if(m)sess=m[1]}if(!sess&&a.image){var m2=a.image.match(/^([^/]+)\//);if(m2)sess=m2[1]}if(sess)fetch(UPLOAD_API,{method:'DELETE',headers:adminHeaders({'X-Session':sess})});data.splice(idx,1);saveData(data).then(function(){renderCards()})})})(+dels[k].dataset.del)}var pg=document.getElementById('pager');pg.innerHTML='';var pb=document.createElement('button');pb.textContent='← 上一页';if(page>0)pb.addEventListener('click',function(){page--;renderCards()});else pb.disabled=true;var nb=document.createElement('button');nb.textContent='下一页 →';if((page+1)*A_SLOTS<=data.length)nb.addEventListener('click',function(){page++;renderCards()});else nb.disabled=true;var sp=document.createElement('span');sp.textContent='第 '+(page+1)+'/'+tp+' 页 ('+data.length+' 个公告)';pg.appendChild(pb);pg.appendChild(sp);pg.appendChild(nb)}
 function openEditor(idx){editIdx=idx;editExisting=idx>=0?data[idx]:null;// 复用已有 session 或新建
 var existSession='';if(editExisting&&editExisting.attach){var m=editExisting.attach.match(/^([^|]+)\//);if(m)existSession=m[1]}
 if(editExisting&&editExisting.image){var m2=editExisting.image.match(/^([^/]+)\//);if(m2)existSession=m2[1]}
 _session=existSession||('ann_'+Date.now());_imgData=null;_imgXhr=null;document.getElementById('dlgTitle').textContent=idx>=0?'编辑公告':'新建公告';document.getElementById('fContent').value=editExisting?(editExisting.content||'').replace(/\\n/g,'\n'):'';var dt=(editExisting&&editExisting.time)?editExisting.time:fmt(nowDate());document.getElementById('fTime').value=dt;var gid=editExisting?editExisting.groupId||'858973074':'858973074';document.getElementById('fGroup').value=(gid==='****')?'****':gid;document.getElementById('fPin').checked=editExisting&&editExisting.pin==='true';document.getElementById('fConfirm').checked=editExisting&&editExisting.confirm==='true';document.getElementById('fImage').value='';if(editExisting&&editExisting.image){_imgData=editExisting.image;var imgDisp=editExisting.image.replace(/^.*\//,'');document.getElementById('imgName').textContent=imgDisp;document.getElementById('imgName').style.color='#22c55e'}else{_imgData=null;document.getElementById('imgName').textContent='未选择';document.getElementById('imgName').style.color='#94a3b8'}_files=[];if(editExisting&&editExisting.attach){var ps=editExisting.attach.split('|');for(var i=0;i<ps.length;i++){if(ps[i]){var raw=ps[i],nm=raw.replace(/^.*\//,'');_files.push({name:nm,token:raw})}}}renderAttach();document.getElementById('dlgOverlay').classList.add('show')}
 var TEMPLATES={album:"【更新公告】专辑《》已开放下载!\n——————————\n内含歌曲：\n",event:"【茶韵Event轮换公告】\n——————————\n▍Event轮换更新预告🔸\n《》将于当前商店活动中专辑结束后限时上架，届时将开启排行榜进行计分。\n▍Event开放时间🔸\nxx/xx 08:00-xx/xx 08:00\n▍专辑曲目🔸\n\n▍活动说明🔸\n此专辑为xx第x期Event，活动成绩参与排名和热度总计。\n",single:"【吼吼点唱机轮换公告】\n————————\n《》→《》\n",cover:"//观影封面\n",position:"//观影定位\n"};document.querySelectorAll(".tpl-capsule").forEach(function(el){el.addEventListener("click",function(){document.getElementById("fContent").value=TEMPLATES[this.dataset.tpl]||""})});
-function cancelEditor(){if(_session&&!editExisting){fetch(UPLOAD_API,{method:'DELETE',headers:{'X-Session':_session}})}document.getElementById('dlgOverlay').classList.remove('show')}
+function cancelEditor(){if(_session&&!editExisting){fetch(UPLOAD_API,{method:'DELETE',headers:adminHeaders({'X-Session':_session})})}document.getElementById('dlgOverlay').classList.remove('show')}
 document.getElementById('btnCancel').addEventListener('click',cancelEditor);
 async function doSave(){var ct=document.getElementById('fContent').value.trim();if(!ct){toast('公告内容不能为空！');return}if(ct.length>600){toast('公告内容不能超过 600 字！当前 '+ct.length+' 字');return}// 等待所有上传完成
 var pending=_files.filter(function(f){return f.xhr});if(_imgXhr)pending.push({xhr:_imgXhr});
@@ -654,19 +655,19 @@ document.getElementById("libSearch").addEventListener("input",function(){renderL
 document.getElementById("libTip").addEventListener("click",function(){var t=document.getElementById('toast');t.textContent='歌曲信息无法展示时，请使用科学上网';t.classList.add('show');setTimeout(function(){t.classList.remove('show')},3500)});
 
 // ===== 管理员分离：设备指纹存服务端名单，暗号在搜索框回车激活（暗号只在后端校验，不出现在前端）=====
-var _ADMIN_PW="iamthetrueeditor",_ADMIN_KEY="_sbOffAdmin_v2";
-	var _isAdmin=false;
+var _isAdmin=false;
 function _deviceId(){try{var k='_sbDev',v=localStorage.getItem(k);if(!v){v=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+''+Math.random().toString(16).slice(2));localStorage.setItem(k,v)}return v}catch(e){return 'nodev'}}
+function adminHeaders(extra){var h=extra||{};h['X-Admin-Device']=_deviceId();return h}
 function _applyAdminUI(){var b=document.querySelector('[data-tab="announce"]'),w=document.getElementById('weOpenBtn');if(b)b.style.display=_isAdmin?'':'none';if(w)w.style.display=_isAdmin?'inline-block':'none'}
-function _checkAdmin(){var offline=localStorage.getItem(_ADMIN_KEY)==='1';fetch(API_BASE+'/api/admin/check?d='+encodeURIComponent(_deviceId())).then(function(r){return r.json()}).then(function(d){_isAdmin=!!(d&&d.admin);if(!_isAdmin&&offline)_isAdmin=true;_applyAdminUI()}).catch(function(){_isAdmin=offline;_applyAdminUI()})}
+function _checkAdmin(){fetch(API_BASE+'/api/admin/check?d='+encodeURIComponent(_deviceId())).then(function(r){return r.json()}).then(function(d){_isAdmin=!!(d&&d.admin);_applyAdminUI()}).catch(function(){_isAdmin=false;_applyAdminUI()})}
 document.getElementById("libSearch").addEventListener("keydown",function(e){
  if(e.key!=='Enter')return;
  var v=this.value.trim();if(!/^[a-zA-Z]{6,40}$/.test(v))return; // 仅疑似暗号才发后端，普通搜索(含空格/中文/数字)不外传
  var self=this;
  fetch(API_BASE+'/api/admin/grant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({d:_deviceId(),p:v})})
   .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
-  .then(function(d){if(d&&d.admin){_isAdmin=true;_applyAdminUI();localStorage.setItem(_ADMIN_KEY,"1");self.value='';renderLibrary('');toast('管理员权限已激活')}})
-  .catch(function(e){if(v===_ADMIN_PW){_isAdmin=true;_applyAdminUI();localStorage.setItem(_ADMIN_KEY,"1");self.value='';renderLibrary('');toast('离线管理员已激活')}else{toast('暗号错误')}});
+  .then(function(d){if(d&&d.admin){_isAdmin=true;_applyAdminUI();self.value='';renderLibrary('');toast('管理员权限已激活')}else{toast('暗号错误')}})
+  .catch(function(){toast('管理员服务不可用')});
 });
 _checkAdmin();
 // 曲库现在是默认标签，页面加载即载入
@@ -1311,7 +1312,7 @@ function cardCSS(){
 				css+='}\n';
 			});
 			var cfg={card:_ds.card,cover:_ds.cover,name:_ds.name,artist:_ds.artist,bpm:_ds.bpm,duration:_ds.duration,charters:_ds.charters,tags:_ds.tags,heart:_ds.heart,shapes:_ds.shapes,popup:_dsPopup,filters:_dsFilters};
-			fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({css:css,maxWidth:_ds.card.w+40,config:JSON.stringify(cfg)})}).then(function(r){
+			fetch(API,{method:"POST",headers:adminHeaders({"Content-Type":"application/json"}),body:JSON.stringify({css:css,maxWidth:_ds.card.w+40,config:JSON.stringify(cfg)})}).then(function(r){
 				if(r.ok){dsToast("已注入! 刷新曲库页查看效果")}else{dsToast("保存失败")}
 				btn.disabled=false;btn.textContent="注入保存";_dsSaving=false;
 			}).catch(function(){dsToast("保存失败");btn.disabled=false;btn.textContent="注入保存";_dsSaving=false});
@@ -1696,7 +1697,7 @@ window.closeWebsiteEditor=function(){
 window.syncPosts=function(){
 	var list=document.getElementById('weFileList');
 	list.innerHTML='<div class="we-empty-state">加载中...</div>';
-	fetch(BLOG_API+'/list')
+	fetch(BLOG_API+'/list',{headers:adminHeaders()})
 		.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
 		.then(function(files){
 			if(!Array.isArray(files)){list.innerHTML='<div class="we-empty-state">无数据</div>';return}
@@ -1726,7 +1727,7 @@ function openMdFile(filename){
 	var items=document.querySelectorAll('.we-file-item');
 	items.forEach(function(el){if(el.textContent===filename)el.classList.add('active')});
 
-	fetch(BLOG_API+'/read?'+encodeURIComponent(filename))
+	fetch(BLOG_API+'/read?'+encodeURIComponent(filename),{headers:adminHeaders()})
 		.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
 		.then(function(d){
 			document.getElementById('weEditor').value=d.content||'';
@@ -1746,7 +1747,7 @@ window.saveCurrentMd=function(){
 	btn.disabled=true;btn.textContent='保存中...';
 	fetch(BLOG_API+'/save',{
 		method:'POST',
-		headers:{'Content-Type':'application/json'},
+		headers:adminHeaders({'Content-Type':'application/json'}),
 		body:JSON.stringify({name:_currentFile,content:content})
 	})
 	.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
@@ -1778,7 +1779,7 @@ window.handleMdUpload=function(input){
 		var content=reader.result;
 		fetch(BLOG_API+'/save',{
 			method:'POST',
-			headers:{'Content-Type':'application/json'},
+			headers:adminHeaders({'Content-Type':'application/json'}),
 			body:JSON.stringify({name:file.name,content:content})
 		})
 		.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
