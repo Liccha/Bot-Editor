@@ -658,7 +658,7 @@ document.getElementById("libTip").addEventListener("click",function(){var t=docu
 var _isAdmin=false;
 function _deviceId(){try{var k='_sbDev',v=localStorage.getItem(k);if(!v){v=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+''+Math.random().toString(16).slice(2));localStorage.setItem(k,v)}return v}catch(e){return 'nodev'}}
 function adminHeaders(extra){var h=extra||{};h['X-Admin-Device']=_deviceId();return h}
-function _applyAdminUI(){var b=document.querySelector('[data-tab="announce"]'),w=document.getElementById('weOpenBtn');if(b)b.style.display=_isAdmin?'':'none';if(w)w.style.display=_isAdmin?'inline-block':'none';if(_isAdmin&&b&&!b.classList.contains('active'))b.click()}
+function _applyAdminUI(){var b=document.querySelector('[data-tab="announce"]'),w=document.getElementById('weOpenBtn');if(b)b.style.display=_isAdmin?'':'none';if(w)w.style.display=_isAdmin?'inline-block':'none'}
 function _checkAdmin(){fetch(API_BASE+'/api/admin/check?d='+encodeURIComponent(_deviceId())).then(function(r){return r.json()}).then(function(d){_isAdmin=!!(d&&d.admin);_applyAdminUI()}).catch(function(){_isAdmin=false;_applyAdminUI()})}
 document.getElementById("libSearch").addEventListener("keydown",function(e){
  if(e.key!=='Enter')return;
