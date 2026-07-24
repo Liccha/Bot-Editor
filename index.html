@@ -478,6 +478,8 @@ loadData();
 
 // ==================== 曲库查询 ====================
 var LIB_DATA=[],_libFilter="ALL",_DS_CFG={shapes:[],card:{}};
+var _iosRenderBatch=48,_iosRenderLimit=48,_iosRenderKey="";
+function _isIOSDevice(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||((navigator.platform==='MacIntel')&&navigator.maxTouchPoints>1)}
 try{var dc=document.getElementById("dsConfig");if(dc){_DS_CFG=JSON.parse(dc.textContent);document.documentElement.style.setProperty("--card-w",_DS_CFG.card&&_DS_CFG.card.w||700);document.documentElement.style.setProperty("--card-h",_DS_CFG.card&&_DS_CFG.card.h||110)}}catch(e){}
 var _dsFilters={font:'方正粗圆简体',fontSize:16,borderRadius:50,capsuleWidth:110,capsuleHeight:42,fontScaleX:1,unselectedBgColor:'#ffffff',unselectedBgOpacity:70,strokeColor:'#1e293b',strokeWidth:0,capsules:{ALL:{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'4K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'5K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'6K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},Catch:{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'}}};
 (function(){try{if(_DS_CFG.filters){var f=_DS_CFG.filters;for(var k in f){if(k!=='capsules'&&k!=='selectedColor'&&k!=='unselectedColor'&&k!=='unselectedBg')_dsFilters[k]=f[k]}if(typeof f.unselectedBg==='string'){var m=f.unselectedBg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);if(m){_dsFilters.unselectedBgColor='#'+(+m[1]).toString(16).padStart(2,'0')+(+m[2]).toString(16).padStart(2,'0')+(+m[3]).toString(16).padStart(2,'0');if(m[4]!==undefined)_dsFilters.unselectedBgOpacity=Math.round(+m[4]*100)}}if(f.capsules)for(var k in f.capsules){var oc=f.capsules[k];var nc=_dsFilters.capsules[k]=Object.assign({},_dsFilters.capsules[k],oc);if(!nc.selectedColor&&f.selectedColor)nc.selectedColor=f.selectedColor;if(!nc.unselectedColor&&f.unselectedColor)nc.unselectedColor=f.unselectedColor}}}catch(e){}})();
@@ -582,13 +584,18 @@ window.heartToggle=heartToggle;
 function renderLibrary(filter){
  if(!LIB_DATA.length)return;
  var today=new Date();today=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
- var q=(filter||"").toLowerCase(),html="",count=0,hidden=0;
+ var q=(filter||"").toLowerCase(),html="",count=0,hidden=0,rendered=0;
+ var iosBatch=_isIOSDevice(),renderKey=_libFilter+"\n"+q;
+ if(iosBatch&&_iosRenderKey!==renderKey){_iosRenderKey=renderKey;_iosRenderLimit=_iosRenderBatch}
+ var renderLimit=iosBatch?_iosRenderLimit:Infinity;
  for(var i=0;i<LIB_DATA.length;i++){
   var s=LIB_DATA[i];
   if(!s.name||s.name.trim()===""){hidden++;continue}
   if(s.albumDate&&s.albumDate>today){hidden++;continue}
   if(_libFilter!=="ALL"){var hasMode=false;(s.charts||[]).forEach(function(c){if(_libFilter==="Catch"){var ok=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&c[k].isMode3});if(ok)hasMode=true}else{if(c.mode===_libFilter){var ok2=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&!c[k].isMode3&&(c[k].level>0||c[k].combo>0)});if(ok2)hasMode=true}}});if(!hasMode){hidden++;continue}}
   if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
+  count++;
+  if(rendered>=renderLimit)continue;
   var cov=s.cover||"";
   var tags="";
   if(_libFilter==="ALL"){
@@ -608,13 +615,13 @@ function renderLibrary(filter){
    ].forEach(function(tp){if(tp.v)tags+="<span style=\"background:"+tp.bg+";color:"+tp.cl+"\">"+tp.label+"</span>"});
   }
   html+="<div class=\"lib-card\" data-idx="+i+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" src=\""+cov+"?v=2\"":"")+" width=\"80\" height=\"80\" loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" onerror=\"this.removeAttribute('src')\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
-  count++;
+  rendered++;
  }
  	// 跑马灯：曲名/作者裁剪到「爱心占位左边界」，文字触及该边界即滚动（用 layout px，兼容手机 scale）
 	setTimeout(function(){
 	 var isMobile=window.innerWidth<=768;
 	 var speed=isMobile?40:80;
-	 document.querySelectorAll(".lib-card").forEach(function(card){
+	 grid.querySelectorAll(".lib-card").forEach(function(card){
 	  var heart=card.querySelector('.heart');
 	  // 爱心占位左边界(相对卡片，layout px)；无爱心则退回卡片内容右边界
 	  var zoneLeft=(heart&&heart.offsetParent)?(heart.offsetLeft-6):card.clientWidth;
@@ -643,10 +650,11 @@ function renderLibrary(filter){
 	},400);
 	var grid=document.getElementById("libGrid");grid.onclick=function(e){var h=e.target.closest(".heart");if(h){e.stopPropagation();var hid=parseInt(h.dataset.hid);if(!isNaN(hid))heartToggle(hid);return}var card=e.target.closest(".lib-card");if(card){var idx=parseInt(card.dataset.idx);if(!isNaN(idx)){playSong(idx,card);showSongDetail(idx)}}};
 	grid.innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
+	if(iosBatch&&count>rendered){var more=document.createElement('button');more.type='button';more.textContent='加载更多（'+rendered+'/'+count+'）';more.style.cssText='grid-column:1/-1;margin:12px auto 24px;padding:10px 22px;border:1px solid #cbd5e1;border-radius:20px;background:#fff;color:#475569;font:inherit;cursor:pointer';more.addEventListener('click',function(){_iosRenderLimit+=_iosRenderBatch;renderLibrary(filter)});grid.appendChild(more)}
 	updateAllHearts();
 	// 封面缓存：用 Cache API 替换 img.src，下次直接从硬盘读取
 	setTimeout(function(){
-	 document.querySelectorAll('.lib-card .cv[src]').forEach(function(img){
+	 grid.querySelectorAll('.lib-card .cv[src]').forEach(function(img){
 	  var url=img.getAttribute('src');if(!url)return;
 	  loadAsset(url,function(bu){if(img.getAttribute('src')!==bu)img.src=bu});
 	 });
