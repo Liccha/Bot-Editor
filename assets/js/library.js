@@ -1,0 +1,469 @@
+/* Bot Editor module: library.js */
+// ==================== 曲库查询 ====================
+var LIB_DATA=[],_libFilter="ALL",_DS_CFG={shapes:[],card:{}};
+var _iosRenderBatch=48,_iosRenderLimit=48,_iosRenderKey="";
+var _desktopRenderBatch=120,_desktopRenderLimit=120,_desktopRenderKey="",_libraryMoreObserver=null;
+function _isIOSDevice(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||((navigator.platform==='MacIntel')&&navigator.maxTouchPoints>1)}
+try{var dc=document.getElementById("dsConfig");if(dc){_DS_CFG=JSON.parse(dc.textContent);document.documentElement.style.setProperty("--card-w",_DS_CFG.card&&_DS_CFG.card.w||700);document.documentElement.style.setProperty("--card-h",_DS_CFG.card&&_DS_CFG.card.h||110)}}catch(e){}
+var _dsFilters={font:'方正粗圆简体',fontSize:16,borderRadius:50,capsuleWidth:110,capsuleHeight:42,fontScaleX:1,unselectedBgColor:'#ffffff',unselectedBgOpacity:70,strokeColor:'#1e293b',strokeWidth:0,capsules:{ALL:{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'4K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'5K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'6K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},Catch:{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'}}};
+(function(){try{if(_DS_CFG.filters){var f=_DS_CFG.filters;for(var k in f){if(k!=='capsules'&&k!=='selectedColor'&&k!=='unselectedColor'&&k!=='unselectedBg')_dsFilters[k]=f[k]}if(typeof f.unselectedBg==='string'){var m=f.unselectedBg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);if(m){_dsFilters.unselectedBgColor='#'+(+m[1]).toString(16).padStart(2,'0')+(+m[2]).toString(16).padStart(2,'0')+(+m[3]).toString(16).padStart(2,'0');if(m[4]!==undefined)_dsFilters.unselectedBgOpacity=Math.round(+m[4]*100)}}if(f.capsules)for(var k in f.capsules){var oc=f.capsules[k];var nc=_dsFilters.capsules[k]=Object.assign({},_dsFilters.capsules[k],oc);if(!nc.selectedColor&&f.selectedColor)nc.selectedColor=f.selectedColor;if(!nc.unselectedColor&&f.unselectedColor)nc.unselectedColor=f.unselectedColor}}}catch(e){}})();
+function _hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(function(c){return c+c}).join('');var n=parseInt(h,16);return{r:(n>>16)&255,g:(n>>8)&255,b:n&255}}
+function _unselectedBgCss(){var c=_hexToRgb(_dsFilters.unselectedBgColor||'#ffffff');return'rgba('+c.r+','+c.g+','+c.b+','+((_dsFilters.unselectedBgOpacity||0)/100)+')'}
+function applyFiltersCSS(){var f=_dsFilters;var s=document.getElementById('filterCapsuleStyles')||document.createElement('style');s.id='filterCapsuleStyles';var ff=f.font==='默认'?"'Microsoft YaHei',sans-serif":"'"+f.font+"','Microsoft YaHei',sans-serif";var stroke=f.strokeWidth>0?';-webkit-text-stroke:'+f.strokeWidth+'px '+f.strokeColor+';paint-order:stroke fill':' ';var css='#libFilters .tpl-capsule{font-family:'+ff+';font-size:'+f.fontSize+'px;border-radius:'+f.borderRadius+'px;background:'+_unselectedBgCss()+';width:'+f.capsuleWidth+'px;height:'+f.capsuleHeight+'px;overflow:hidden;box-sizing:border-box;border:none;font-weight:600;letter-spacing:.5px;box-shadow:inset 0 0 0 1px rgba(203,213,225,0.6),0 1px 3px rgba(0,0,0,0.04);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}';css+='#libFilters .tpl-capsule .ct{display:inline-block;transform:scaleX('+(f.fontScaleX||1)+')}';css+='#libFilters .tpl-capsule:hover{background:#fff;transform:translateY(-1px);box-shadow:inset 0 0 0 1px rgba(203,213,225,0.6),0 4px 12px rgba(0,0,0,0.1)}';['ALL','4K','5K','6K','Catch'].forEach(function(k){var c=f.capsules[k];if(!c)return;css+='#libFilters .tpl-capsule[data-flt="'+k+'"]{color:'+(c.unselectedColor||'#64748b')+'}';css+='#libFilters .tpl-capsule[data-flt="'+k+'"].active{color:'+(c.selectedColor||'#fff')+'!important;background:linear-gradient(90deg,'+c.gradLeft+','+c.gradRight+')!important;box-shadow:0 4px 14px '+c.gradLeft+'66,inset 0 1px 0 rgba(255,255,255,0.3);transform:translateY(-1px)'+stroke+'}'});css+='#libFilters .tpl-capsule.active:hover{filter:brightness(1.1)}';s.textContent=css;if(!s.parentNode)document.head.appendChild(s)}
+applyFiltersCSS();
+var _cacheVersion="v2";
+
+// ---- 持久化资源缓存：限制磁盘条目和内存 Blob 数，避免 iOS 长时间浏览后内存失控 ----
+var _assetCache=null,_assetCachePruned=false,_blobUrls={},_blobOrder=[],_assetPending={};
+var _ASSET_CACHE_NAME='songbot-assets-v2',_MAX_CACHE_ENTRIES=256,_MAX_BLOB_URLS=96;
+function openAssetCache(){
+ if(_assetCache)return Promise.resolve(_assetCache);
+ if(!('caches' in window))return Promise.reject('no-caches');
+ return caches.open(_ASSET_CACHE_NAME).then(function(c){
+  _assetCache=c;
+  caches.delete('songbot-assets-v1').catch(function(){});
+  if(!_assetCachePruned){
+   _assetCachePruned=true;
+   c.keys().then(function(keys){
+    var excess=keys.length-_MAX_CACHE_ENTRIES;
+    if(excess>0)keys.slice(0,excess).forEach(function(key){c.delete(key).catch(function(){})});
+   }).catch(function(){});
+  }
+  return c;
+ });
+}
+function _rememberBlobUrl(url,blobUrl){
+ _blobUrls[url]=blobUrl;_blobOrder.push(url);
+ if(_blobOrder.length<=_MAX_BLOB_URLS)return;
+ var checks=_blobOrder.length;
+ while(_blobOrder.length>_MAX_BLOB_URLS&&checks-->0){
+  var oldUrl=_blobOrder.shift(),oldBlob=_blobUrls[oldUrl];
+  if(!oldBlob)continue;
+  var inUse=Array.prototype.some.call(document.querySelectorAll('[src]'),function(el){
+   return el.getAttribute('src')===oldBlob||el.src===oldBlob;
+  });
+  if(inUse){_blobOrder.push(oldUrl);continue}
+  try{URL.revokeObjectURL(oldBlob)}catch(e){}
+  delete _blobUrls[oldUrl];
+ }
+}
+function _resolveAsset(url){
+ if(_blobUrls[url])return Promise.resolve(_blobUrls[url]);
+ if(_assetPending[url])return _assetPending[url];
+ var task=openAssetCache().then(function(cache){
+  return cache.match(url).then(function(hit){
+   return hit||fetch(url,{referrerPolicy:'no-referrer'}).then(function(r){
+    if(!r.ok&&r.type!=='opaque')throw new Error('HTTP '+r.status);
+    cache.put(url,r.clone()).catch(function(){});
+    return r;
+   });
+  }).then(function(r){
+   if(!r||(!r.ok&&r.type!=='opaque'))throw new Error('invalid asset response');
+   return r.blob();
+  }).then(function(b){
+   var bu=URL.createObjectURL(b);_rememberBlobUrl(url,bu);return bu;
+  });
+ });
+ _assetPending[url]=task;
+ task.then(function(){delete _assetPending[url]},function(){delete _assetPending[url]});
+ return task;
+}
+function loadAsset(url,onDone){
+ if(!url){onDone('');return}
+ _resolveAsset(url).then(onDone,function(){onDone(url)});
+}
+
+async function loadLibrary(){
+ document.getElementById("libStats").textContent="Loading...";
+ var fromCache=false;
+ try{
+  var c2=localStorage.getItem("songlib_data");
+  if(c2){try{var d=JSON.parse(c2);if(d.version===_cacheVersion&&d.data&&d.data.length){LIB_DATA=d.data;fromCache=true;document.getElementById("libStats").textContent=LIB_DATA.length+" songs (cached)";renderLibrary()}}catch(e){}}
+   var r=await fetch("https://raw.githubusercontent.com/Liccha/song-library/master/data/songs.json",{cache:'no-cache'});
+   if(r.ok){
+    var json=await r.json();json.sort(function(a,b){return b.id-a.id});
+    if(!Array.isArray(json))throw new Error("歌曲数据格式无效");
+    LIB_DATA=json;
+    try{localStorage.setItem("songlib_data",JSON.stringify({version:_cacheVersion,data:json,time:Date.now()}))}catch(e){}
+    document.getElementById("libStats").textContent=json.length+" songs";
+    renderLibrary(document.getElementById("libSearch").value);
+   }else if(!fromCache)throw new Error("HTTP "+r.status);
+ }catch(e){if(!fromCache)document.getElementById("libStats").textContent="Failed: "+e.message}
+}
+
+// ===== 点赞系统（卡片 + 小窗共用，按歌曲 id 计数）=====
+var _LIKES={},_LIKED=new Set(),_metaLoaded=false;
+// 用 SVG 心形，避免 ♥ 字形在手机端被 emoji/字体替换导致变扁变窄
+function _saveLikes(){try{localStorage.setItem('_sb_likes',JSON.stringify(_LIKES));localStorage.setItem('_sb_liked',JSON.stringify(Array.from(_LIKED)))}catch(e){}}
+	var _likeReplayTimer=0,_likeReplayActive=false;
+	function _enqueue(a,id){try{var q=JSON.parse(localStorage.getItem('_sb_likeQ')||'[]');q.push({a:a,id:id,ts:Date.now()});if(q.length>200)q=q.slice(-200);localStorage.setItem('_sb_likeQ',JSON.stringify(q))}catch(e){}}
+	function _scheduleLikeReplay(){if(_likeReplayTimer)return;_likeReplayTimer=setTimeout(function(){_likeReplayTimer=0;_replayQueue()},30000)}
+	function _replayQueue(){
+	 if(_likeReplayActive||!navigator.onLine)return;
+	 var q;try{q=JSON.parse(localStorage.getItem('_sb_likeQ')||'[]')}catch(e){return}
+	 if(!q||!q.length)return;
+	 var item=q[0];if(!item)return;
+	 _likeReplayActive=true;
+	 var m=item.a==='like'?'POST':'DELETE';
+	 fetch(API_BASE+'/api/like',{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id})})
+	  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(){
+	   _likeReplayActive=false;
+	   try{var q2=JSON.parse(localStorage.getItem('_sb_likeQ')||'[]');q2.shift();localStorage.setItem('_sb_likeQ',JSON.stringify(q2));_replayQueue()}catch(e){}
+	  }).catch(function(){_likeReplayActive=false;_scheduleLikeReplay()});
+	}
+	var _HEART_SVG='<svg viewBox="0 0 32 29.6" aria-hidden="true"><path d="M23.6,0c-3.4,0-6.3,2.7-7.6,5.1C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4c0,9.4,9.5,11.9,16,21.2c6.1-9.3,16-12.1,16-21.2C32,3.8,28.2,0,23.6,0z"/></svg>';
+function loadMeta(){
+ try{var d=JSON.parse(localStorage.getItem('_sb_likes')||'{}');_LIKES=d||{};var a=JSON.parse(localStorage.getItem('_sb_liked')||'[]');_LIKED=new Set(a||[])}catch(e){}
+ _metaLoaded=true;updateAllHearts();
+ fetch(API_BASE+'/api/meta').then(function(r){return r.json()}).then(function(d){
+  _LIKES=d.likes||{};_LIKED=new Set(d.likedToday||[]);_metaLoaded=true;
+  updateAllHearts();_saveLikes();_replayQueue();
+ }).catch(function(){});
+}
+function updateAllHearts(){
+ document.querySelectorAll('.heart[data-hid],.ld-heart[data-hid]').forEach(function(el){
+  var id=parseInt(el.dataset.hid);if(isNaN(id))return;
+  var n=el.querySelector('.heart-n');if(n)n.textContent=_LIKES[id]||0;
+  el.classList.toggle('liked',_LIKED.has(id));
+ });
+}
+function updateHeartUI(id){
+ document.querySelectorAll('.heart[data-hid="'+id+'"],.ld-heart[data-hid="'+id+'"]').forEach(function(el){
+  var n=el.querySelector('.heart-n');if(n)n.textContent=_LIKES[id]||0;
+  el.classList.toggle('liked',_LIKED.has(id));
+ });
+}
+function doLike(id){
+ if(_LIKED.has(id))return;
+ _LIKED.add(id);_LIKES[id]=(_LIKES[id]||0)+1;updateHeartUI(id);_saveLikes();
+ fetch(API_BASE+'/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){_LIKES[id]=d.count;_saveLikes();updateHeartUI(id)}).catch(function(){_enqueue('like',id);_scheduleLikeReplay()});
+}
+function doUnlike(id){
+ if(!_LIKED.has(id))return;
+ _LIKED.delete(id);_LIKES[id]=Math.max(0,(_LIKES[id]||1)-1);updateHeartUI(id);_saveLikes();
+ fetch(API_BASE+'/api/like',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){_LIKES[id]=d.count;_saveLikes();updateHeartUI(id)}).catch(function(){_enqueue('unlike',id);_scheduleLikeReplay()});
+}
+// 切换：点一下 +1，再点一下 -1（无需检测双击）
+function heartToggle(id){ if(_LIKED.has(id)) doUnlike(id); else doLike(id); }
+window.heartToggle=heartToggle;
+window.addEventListener('online',_replayQueue);
+
+var _libraryRenderGeneration=0,_librarySearchTimer=0,_libraryMarqueeTimer=0,_libraryAssetTimer=0;
+function renderLibrary(filter){
+ if(!LIB_DATA.length)return;
+ var generation=++_libraryRenderGeneration;
+ var today=new Date();today=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
+ var q=(filter||"").toLowerCase(),html="",count=0,hidden=0,rendered=0;
+ var iosBatch=_isIOSDevice(),renderKey=_libFilter+"\n"+q;
+ if(iosBatch&&_iosRenderKey!==renderKey){_iosRenderKey=renderKey;_iosRenderLimit=_iosRenderBatch}
+ if(!iosBatch&&_desktopRenderKey!==renderKey){_desktopRenderKey=renderKey;_desktopRenderLimit=_desktopRenderBatch}
+ var renderLimit=iosBatch?_iosRenderLimit:_desktopRenderLimit;
+ for(var i=0;i<LIB_DATA.length;i++){
+  var s=LIB_DATA[i];
+  if(!s.name||s.name.trim()===""){hidden++;continue}
+  if(s.albumDate&&s.albumDate>today){hidden++;continue}
+  if(_libFilter!=="ALL"){var hasMode=false;(s.charts||[]).forEach(function(c){if(_libFilter==="Catch"){var ok=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&c[k].isMode3});if(ok)hasMode=true}else{if(c.mode===_libFilter){var ok2=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&!c[k].isMode3&&(c[k].level>0||c[k].combo>0)});if(ok2)hasMode=true}}});if(!hasMode){hidden++;continue}}
+  if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
+  count++;
+  if(rendered>=renderLimit)continue;
+  var cov=s.cover||"";
+  var tags="";
+  if(_libFilter==="ALL"){
+   var cfg=_DS_CFG.tags||{};
+   var has4K=false,has5K=false,has6K=false,hasCatch=false;
+   (s.charts||[]).forEach(function(c){
+    var isCatch=false;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]&&c[k].isMode3)isCatch=true});
+    if(isCatch)hasCatch=true;
+    else if(c.mode==="4K")has4K=true;
+    else if(c.mode==="5K")has5K=true;
+    else if(c.mode==="6K")has6K=true;
+   });
+   [{v:has4K,label:"4键",bg:cfg.bg4k||"#dbeafe",cl:cfg.color4k||"#1e40af"},
+    {v:has5K,label:"5键",bg:cfg.bg5k||"#dbeafe",cl:cfg.color5k||"#1e40af"},
+    {v:has6K,label:"6键",bg:cfg.bg6k||"#dbeafe",cl:cfg.color6k||"#1e40af"},
+    {v:hasCatch,label:"Catch",bg:cfg.bgCatch||"#fce7f3",cl:cfg.colorCatch||"#9d174d"}
+   ].forEach(function(tp){if(tp.v)tags+="<span style=\"background:"+tp.bg+";color:"+tp.cl+"\">"+tp.label+"</span>"});
+  }
+  html+="<div class=\"lib-card\" data-idx="+i+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" src=\""+cov+"?v=2\"":"")+" width=\"80\" height=\"80\" loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" onerror=\"this.removeAttribute('src')\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
+  rendered++;
+ }
+ var grid=document.getElementById("libGrid");grid.onclick=function(e){var h=e.target.closest(".heart");if(h){e.stopPropagation();var hid=parseInt(h.dataset.hid);if(!isNaN(hid))heartToggle(hid);return}var card=e.target.closest(".lib-card");if(card){var idx=parseInt(card.dataset.idx);if(!isNaN(idx)){playSong(idx,card);showSongDetail(idx)}}};
+ grid.innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
+ if(_libraryMoreObserver){_libraryMoreObserver.disconnect();_libraryMoreObserver=null}
+ if(count>rendered){
+  var more=document.createElement('button');more.type='button';more.textContent='加载更多（'+rendered+'/'+count+'）';more.style.cssText='grid-column:1/-1;margin:12px auto 24px;padding:10px 22px;border:1px solid #cbd5e1;border-radius:20px;background:#fff;color:#475569;font:inherit;cursor:pointer';
+  more.addEventListener('click',function(){if(iosBatch)_iosRenderLimit+=_iosRenderBatch;else _desktopRenderLimit+=_desktopRenderBatch;renderLibrary(filter)});
+  grid.appendChild(more);
+  if(!iosBatch&&'IntersectionObserver' in window){
+   _libraryMoreObserver=new IntersectionObserver(function(entries){if(entries.some(function(entry){return entry.isIntersecting})){_libraryMoreObserver.disconnect();more.click()}},{rootMargin:'500px 0px'});
+   _libraryMoreObserver.observe(more);
+  }
+ }
+ updateAllHearts();
+ // 跑马灯：曲名/作者裁剪到「爱心占位左边界」，文字触及该边界即滚动（用 layout px，兼容手机 scale）
+ clearTimeout(_libraryMarqueeTimer);
+ _libraryMarqueeTimer=setTimeout(function(){
+	 if(generation!==_libraryRenderGeneration)return;
+	 var isMobile=window.innerWidth<=768;
+	 var speed=isMobile?40:80;
+	 grid.querySelectorAll(".lib-card").forEach(function(card){
+	  var heart=card.querySelector('.heart');
+	  // 爱心占位左边界(相对卡片，layout px)；无爱心则退回卡片内容右边界
+	  var zoneLeft=(heart&&heart.offsetParent)?(heart.offsetLeft-6):card.clientWidth;
+	  card.querySelectorAll('.na, .ar').forEach(function(el){
+	   el.style.animation="none";el.style.whiteSpace="nowrap";el.style.overflow="hidden";el.style.textOverflow="clip";
+	   var maxW=Math.max(10,zoneLeft-el.offsetLeft); // 该行到爱心左侧的可用宽度
+	   var txt=(el.querySelector('span')?el.querySelector('span').textContent:el.textContent);
+	   // 单份测量文字自然宽度
+	   el.style.width="auto";
+	   el.innerHTML='<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>';
+	   var natural=el.firstChild.offsetWidth;
+	   el.style.width=maxW+"px"; // 固定裁剪框：右界=爱心占位左侧，遮挡进入爱心区的文字
+	   if(natural>maxW+2){ // 文字末端触及爱心左界才滚动
+	    var gap=Math.round(maxW*0.3);
+	    el.innerHTML='<div class="mq" style="display:inline-block;white-space:nowrap;will-change:transform">'
+	     +'<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>'
+	     +'<span style="display:inline-block;width:'+gap+'px"></span>'
+	     +'<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span></div>';
+	    var mq=el.firstChild,span1W=mq.querySelector('span').offsetWidth;
+	    var offset=Math.ceil(span1W+gap);
+	    mq.style.setProperty("--marquee-step",(-offset)+"px");
+	    mq.style.animation="scrollX "+Math.max(3,(span1W+gap)/speed)+"s linear infinite";
+	   }
+	  });
+	 });
+	},400);
+ // 封面缓存：用 Cache API 替换 img.src，下次直接从硬盘读取
+ clearTimeout(_libraryAssetTimer);
+ _libraryAssetTimer=setTimeout(function(){
+	 if(generation!==_libraryRenderGeneration)return;
+	 grid.querySelectorAll('.lib-card .cv[src]').forEach(function(img){
+	  var url=img.getAttribute('src');if(!url)return;
+	  loadAsset(url,function(bu){if(generation===_libraryRenderGeneration&&img.isConnected&&img.getAttribute('src')!==bu)img.src=bu});
+	 });
+	},0);
+ var total=LIB_DATA.length-hidden;
+ document.getElementById("libStats").textContent=(filter?"Found "+count+"/"+total:total+" songs");
+}
+	 
+	
+document.getElementById("libFilters").addEventListener("click",function(e){var el=e.target.closest('[data-flt]');if(el){_libFilter=el.dataset.flt;document.querySelectorAll("#libFilters .tpl-capsule").forEach(function(s){s.classList.remove("active")});el.classList.add("active");var q=document.getElementById("libSearch").value;clearTimeout(_librarySearchTimer);requestAnimationFrame(function(){renderLibrary(q)})}});
+document.getElementById("libSearch").addEventListener("input",function(){var q=this.value;clearTimeout(_librarySearchTimer);_librarySearchTimer=setTimeout(function(){renderLibrary(q)},120)});
+document.getElementById("libTip").addEventListener("click",function(){var t=document.getElementById('toast');t.textContent='歌曲信息无法展示时，请使用科学上网';t.classList.add('show');setTimeout(function(){t.classList.remove('show')},3500)});
+
+// ===== 管理员分离：设备指纹存服务端名单，暗号在搜索框回车激活（暗号只在后端校验，不出现在前端）=====
+var _isAdmin=false;
+function _deviceId(){try{var k='_sbDev',v=localStorage.getItem(k);if(!v){v=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+''+Math.random().toString(16).slice(2));localStorage.setItem(k,v)}return v}catch(e){return 'nodev'}}
+function adminHeaders(extra){var h=extra||{};h['X-Admin-Device']=_deviceId();return h}
+function _applyAdminUI(){var b=document.querySelector('[data-tab="announce"]'),w=document.getElementById('weOpenBtn');if(b)b.style.display=_isAdmin?'':'none';if(w)w.style.display=_isAdmin?'inline-block':'none'}
+function _checkAdmin(){fetch(API_BASE+'/api/admin/check?d='+encodeURIComponent(_deviceId())).then(function(r){return r.json()}).then(function(d){_isAdmin=!!(d&&d.admin);_applyAdminUI()}).catch(function(){_isAdmin=false;_applyAdminUI()})}
+document.getElementById("libSearch").addEventListener("keydown",function(e){
+ if(e.key!=='Enter')return;
+ var v=this.value.trim();if(!/^[a-zA-Z]{6,40}$/.test(v))return; // 仅疑似暗号才发后端，普通搜索(含空格/中文/数字)不外传
+ e.preventDefault();
+ var self=this;
+ fetch(API_BASE+'/api/admin/grant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({d:_deviceId(),p:v})})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+  .then(function(d){if(d&&d.admin){_isAdmin=true;_applyAdminUI();clearTimeout(_librarySearchTimer);self.value='';renderLibrary('');toast('管理员权限已激活')}else{toast('暗号错误')}})
+  .catch(function(){toast('管理员服务不可用')});
+});
+_checkAdmin();
+// 曲库现在是默认标签，页面加载即载入
+if(!window._libLoaded){loadLibrary();loadMeta();window._libLoaded=true}
+
+// ===== 防护(尽力威慑，非绝对)：管理员(本机已激活)不受限；普通访客禁右键/图片拖拽/常见开发者工具快捷键 =====
+document.addEventListener('contextmenu',function(e){if(_isAdmin)return;var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'))return;e.preventDefault()});
+document.addEventListener('dragstart',function(e){if(_isAdmin)return;if(e.target&&e.target.tagName==='IMG')e.preventDefault()});
+document.addEventListener('keydown',function(e){
+ if(_isAdmin)return;
+ var k=(e.key||'').toLowerCase();
+ if(k==='f12'){e.preventDefault();return}
+ if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(k==='i'||k==='j'||k==='c')){e.preventDefault();return}
+ if((e.ctrlKey||e.metaKey)&&(k==='u'||k==='s')){e.preventDefault();return}
+});
+function playSong(idx,cardEl){
+	 var s=LIB_DATA[idx];if(!s)return;
+	 if(!s.preview)return;
+	 if(!cardEl)cardEl=document.querySelector('.lib-card[data-idx="'+idx+'"]');
+	 // 点击同一首 -> 暂停
+	 if(_curIdx===idx&&_curAudio&&!_curAudio.paused){
+	  stopCurrentSong();
+	  return;
+	 }
+	 // 停止旧音频 & 清除高亮
+	 stopCurrentSong();
+	 // 高亮当前（立即，不等缓存）
+	 if(cardEl){cardEl.style.boxShadow="0 0 0 3px #3b82f6";var cv=cardEl.querySelector(".cv");if(cv)cv.style.animation="spin 8s linear infinite"}
+	 // 必须在点击事件的同步调用栈中 play()，否则 iOS 会丢失用户手势许可。
+	 // 已有 Blob 缓存时直接使用；首次播放走原地址，同时在后台填充 Cache API。
+	 var token=++_pendingPlay;
+	 var src=_blobUrls[s.preview]||s.preview;
+	 var a=document.createElement("audio");a.dataset.songbotPreview="1";a.src=src;a.loop=true;a.volume=0.5;a.preload="auto";a.style.display="none";
+	 document.body.appendChild(a);
+	 _curAudio=a;_curIdx=idx;
+	 var playResult=a.play();
+	 if(playResult&&playResult.then){playResult.then(function(){if(token!==_pendingPlay||_curAudio!==a)_disposePreviewAudio(a)}).catch(function(){if(_curAudio===a){_curAudio=null;_curIdx=-1} _disposePreviewAudio(a);_clearPlayingCardState()})}
+	 if(!_blobUrls[s.preview])loadAsset(s.preview,function(){});
+	}
+	var _curAudio=null,_curIdx=-1,_pendingPlay=0;
+	function _disposePreviewAudio(a){
+	 if(!a)return;
+	 try{a.pause()}catch(e){}
+	 try{a.loop=false;a.removeAttribute('src');a.src='';a.load()}catch(e){}
+	 try{a.remove()}catch(e){}
+	}
+	function _clearPlayingCardState(){
+	 document.querySelectorAll(".lib-card .cv").forEach(function(c){c.style.animation="none"});
+	 document.querySelectorAll(".lib-card").forEach(function(c){c.style.boxShadow=""});
+	}
+	window.stopCurrentSong=function(){
+	 ++_pendingPlay;
+	 // iOS Safari can complete a queued play() after the element is detached.
+	 // Dispose every preview we created, not only the latest referenced element.
+	 document.querySelectorAll('audio[data-songbot-preview="1"]').forEach(_disposePreviewAudio);
+	 _curAudio=null;
+	 _clearPlayingCardState();
+	 _curIdx=-1;
+	};
+	window.addEventListener('pagehide',window.stopCurrentSong);
+	// 难度键名排序权重（easy→normal→hard→master→special→其他）
+var _DIFF_ORDER=["easy","ez","normal","nm","hard","hd","master","mx","ms","special","sp"];
+function _diffSortKey(k){var i=_DIFF_ORDER.indexOf(k.toLowerCase());return i<0?99:Math.floor(i/2)}
+function _diffLabel(k){
+ var kl=k.toLowerCase();
+ if(kl==="easy"||kl==="ez")return"简单";
+ if(kl==="normal"||kl==="nm")return"普通";
+ if(kl==="hard"||kl==="hd")return"困难";
+ if(kl==="master"||kl==="mx"||kl==="ms")return"大师";
+ if(kl==="special"||kl==="sp")return"特殊";
+ return k;
+}
+function _diffCls(k){
+ var kl=k.toLowerCase();
+ if(kl==="easy"||kl==="ez")return"ld-easy";
+ if(kl==="normal"||kl==="nm")return"ld-normal";
+ if(kl==="hard"||kl==="hd")return"ld-hard";
+ return"ld-master";
+}
+
+function _modeTagCls(m){if(m==='4K')return'ld-tag-4k';if(m==='5K')return'ld-tag-5k';if(m==='6K')return'ld-tag-6k';if(m==='Catch')return'ld-tag-catch';return'ld-tag-4k'}
+
+function _applyPopupBg(covUrl){
+ var dd=document.getElementById('libDetailContent');if(!dd||!covUrl)return;
+ var src=_blobUrls[covUrl]||covUrl;
+ if(!src)return;
+ var bg=dd.querySelector('.ld-blur-bg');
+ if(!bg){bg=document.createElement('div');bg.className='ld-blur-bg';dd.insertBefore(bg,dd.firstChild)}
+ bg.style.backgroundImage='url('+src+')';
+}
+
+function showSongDetail(idx){
+ var s=LIB_DATA[idx];if(!s)return;
+ var covSrc=_blobUrls[s.cover]||s.cover||"";
+ var charterStr=(s.charters||[]).join("、")||"—";
+
+ var chartsHtml="";
+ (s.charts||[]).forEach(function(c){
+  var isCatch=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&c[k].isMode3});
+  var modeLabel=isCatch?"Catch":(c.mode||"");
+  var keys=Object.keys(c).filter(function(k){
+   if(k==="mode")return false;
+   var d=c[k];if(!d)return false;
+   return isCatch?!!d.isMode3:(!d.isMode3&&(d.level||d.combo));
+  });
+  keys.sort(function(a,b){return _diffSortKey(a)-_diffSortKey(b)});
+  if(!keys.length)return;
+  chartsHtml+='<div class="ld-mode"><span class="ld-mode-tag '+_modeTagCls(modeLabel)+'">'+escHtml(modeLabel)+'</span><div class="ld-diffs">';
+  keys.forEach(function(k){
+   var d=c[k];
+   var label,cls;
+   if(isCatch){label=d.name||k;cls="ld-catch"}
+   else{label=_diffLabel(k)+' Lv.'+(d.level||0)+'  键数：'+(d.combo||0);cls=_diffCls(k)}
+   chartsHtml+='<span class="ld-diff '+cls+'">'+escHtml(label)+'</span>';
+  });
+  chartsHtml+='</div></div>';
+ });
+
+ var _pshHtml='';
+ if(_DS_CFG.popup&&_DS_CFG.popup.shapes){(_DS_CFG.popup.shapes||[]).forEach(function(sh,i){_pshHtml+='<div class="ld-psh'+i+'"></div>'})}
+ var dd=document.getElementById("libDetailContent");
+ dd.style.background='';  // 重置，等待封面取色覆盖
+ dd.innerHTML=
+  _pshHtml
+  +'<div class="ld-header">'
+  +'<img class="ld-cover" src="'+escHtml(covSrc)+'" onerror="this.removeAttribute(\'src\')">'
+  +'<div class="ld-name">'+escHtml(s.name)+'</div>'
+  +'<div class="ld-artist">'+escHtml(s.artist||"")+'</div>'
+  +'<div class="ld-charter">谱面：'+escHtml(charterStr)+'</div>'
+  +'<div class="ld-heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'
+  +'</div>'
+  +chartsHtml
+  +'<button class="ld-close" onclick="stopCurrentSong();document.getElementById(\'libDetail\').classList.remove(\'show\')">关闭</button>';
+
+ document.getElementById("libDetail").classList.add("show");
+	 // 小窗爱心：定位(来自 _dsPopup.heart) + 单击/双击
+	 var _hpp=(window._dsPopup||(_DS_CFG&&_DS_CFG.popup)||{}),_hp=_hpp.heart||{};
+	 var _hEl=dd.querySelector('.ld-heart');
+	 if(_hEl){
+	  _hEl.style.right=(_hp.hRight!=null?_hp.hRight:20)+'px';_hEl.style.left='auto';
+	  _hEl.style.top=(_hp.hY!=null?_hp.hY:8)+'px';
+	  _hEl.style.fontSize=(_hp.hSize!=null?_hp.hSize:26)+'px';
+	  _hEl.style.setProperty('--heart-color',_hp.hColor||'#cbd5e1');
+	  if(_hp.hVisible===false)_hEl.style.display='none';
+	  _hEl.onclick=function(){heartToggle(s.id)};
+	 }
+	 // 应用小窗文字边界：优先实时编辑值(window._dsPopup)，其次已保存配置(_DS_CFG.popup)
+	 var pp=window._dsPopup||(_DS_CFG&&_DS_CFG.popup)||{naX:96,naRight:350,arX:96,arRight:350};
+	 var nm=document.querySelector('.ld-name');if(nm){nm.style.left=(pp.naX||96)+'px';nm.style.right='auto';nm.style.width=((pp.naRight||350)-(pp.naX||96))+'px'}
+	 var ar=document.querySelector('.ld-artist');if(ar){ar.style.left=(pp.arX||96)+'px';ar.style.right='auto';ar.style.width=((pp.arRight||350)-(pp.arX||96))+'px'}
+ // 小窗歌名/作者走马灯：.ld-name/.ld-artist 作为固定裁剪框(overflow:hidden，
+ // 左右界由 naX/naRight、arX/arRight 决定)，内层 .ld-mq 承载双份文字并 translateX
+ // 滚动、被裁剪框裁掉，与主界面卡片同一套算法；曲名/作者共用同一像素速度。
+ setTimeout(function(){
+  var isMobile=window.innerWidth<=768;
+  var pixelSpeed=isMobile?40:80; // px/s，曲名与作者共用 → 滚动速度一致
+  var heartLeft=(_hEl&&_hEl.offsetParent)?(_hEl.offsetLeft-6):Infinity; // 爱心占位左界(相对标题区)，曲名/作者不得越过
+  document.querySelectorAll('.ld-name, .ld-artist').forEach(function(el){
+   var pp=window._dsPopup||(_DS_CFG&&_DS_CFG.popup)||{};
+   var isName=el.classList.contains('ld-name');
+   var leftX=isName?pp.naX:pp.arX;if(leftX==null)leftX=96;
+   var rightX=isName?pp.naRight:pp.arRight;if(rightX==null)rightX=350;
+   rightX=Math.min(rightX,heartLeft); // 文字末端触及爱心占位左侧即截断/滚动
+   var topY=isName?pp.naY:pp.arY;if(topY==null)topY=isName?4:28;
+   var maxW=Math.max(10,rightX-leftX);
+   var txt=el.textContent;
+   // 固定裁剪框：左右界即隐形文字框，超出部分由 overflow:hidden 裁掉
+   // top 同步 _dsPopup，保证实际弹窗位置与设计器预览一致(生成CSS仅在注入保存后才生效)
+   el.style.animation='none';
+   el.style.left=leftX+'px';el.style.right='auto';el.style.top=topY+'px';
+   el.style.width=maxW+'px';
+   el.style.overflow='hidden';el.style.whiteSpace='nowrap';el.style.textOverflow='clip';
+   // 测量文字自然宽度
+   el.innerHTML='<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>';
+   var textW=el.firstChild.getBoundingClientRect().width;
+   // 仅当文字宽度超过裁剪框才滚动
+   if(textW>maxW+2){
+    var gapPx=Math.round(maxW*0.3);
+    el.innerHTML='<div class="ld-mq" style="display:inline-block;white-space:nowrap;will-change:transform">'
+     +'<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>'
+     +'<span style="display:inline-block;width:'+gapPx+'px"></span>'
+     +'<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>'
+     +'</div>';
+    var mq=el.firstChild;
+    var span1W=mq.querySelector('span').getBoundingClientRect().width;
+    var offset=Math.ceil(span1W+gapPx);
+    mq.style.setProperty('--marquee-step',(-offset)+'px');
+    mq.style.animation='scrollX '+Math.max(3,(span1W+gapPx)/pixelSpeed)+'s linear infinite';
+   }
+  });
+ },200);
+ // 封面取色（useCoverBg 默认开启，dsConfig.popup.useCoverBg===false 时跳过）
+ if(!_DS_CFG.popup||_DS_CFG.popup.useCoverBg!==false){
+  if(s.cover){loadAsset(s.cover,function(bu){_applyPopupBg(bu||s.cover)})}
+ }
+}
+
+window.showSongDetail=showSongDetail;
+	document.getElementById("libDetail").addEventListener("click",function(e){if(e.target===this){stopCurrentSong();this.classList.remove("show")}});
