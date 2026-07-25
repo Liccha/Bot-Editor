@@ -151,6 +151,7 @@ window.heartToggle=heartToggle;
 window.addEventListener('online',_replayQueue);
 
 var _libraryRenderGeneration=0,_librarySearchTimer=0,_libraryMarqueeTimer=0,_libraryCoverObserver=null;
+var _libraryCoverGrid=null,_libraryCoverGeneration=0,_libraryCoverFallbackFrame=0;
 function _loadCardCover(img,generation){
  if(!img||!img.isConnected||img.dataset.coverLoading==='1')return;
  var url=img.dataset.cover||'';if(!url)return;
@@ -162,20 +163,42 @@ function _loadCardCover(img,generation){
   delete img.dataset.coverLoading;
  });
 }
+function _loadCoversNearViewport(){
+ var grid=_libraryCoverGrid,generation=_libraryCoverGeneration;
+ if(!grid||generation!==_libraryRenderGeneration)return;
+ var margin=520,viewport=window.innerHeight||document.documentElement.clientHeight;
+ grid.querySelectorAll('.lib-card .cv[data-cover]').forEach(function(img){
+  if(img.getAttribute('src')||img.dataset.coverLoading==='1')return;
+  var rect=img.getBoundingClientRect();
+  if(rect.bottom>=-margin&&rect.top<=viewport+margin)_loadCardCover(img,generation);
+ });
+}
+function _queueCoverFallback(){
+ if(_libraryCoverFallbackFrame)return;
+ var run=function(){_libraryCoverFallbackFrame=0;_loadCoversNearViewport()};
+ if(window.requestAnimationFrame)_libraryCoverFallbackFrame=window.requestAnimationFrame(run);
+ else _libraryCoverFallbackFrame=setTimeout(run,16);
+}
 function _observeCardCovers(grid,generation){
  if(_libraryCoverObserver){_libraryCoverObserver.disconnect();_libraryCoverObserver=null}
+ _libraryCoverGrid=grid;_libraryCoverGeneration=generation;
  var covers=grid.querySelectorAll('.lib-card .cv[data-cover]');
  if(!covers.length)return;
  if('IntersectionObserver' in window){
-  _libraryCoverObserver=new IntersectionObserver(function(entries){
-   entries.forEach(function(entry){if(entry.isIntersecting){_libraryCoverObserver.unobserve(entry.target);_loadCardCover(entry.target,generation)}});
+  var observer=new IntersectionObserver(function(entries){
+   entries.forEach(function(entry){if(entry.isIntersecting){observer.unobserve(entry.target);_loadCardCover(entry.target,generation)}});
   },{rootMargin:'480px 0px'});
-  covers.forEach(function(img){_libraryCoverObserver.observe(img)});
+  _libraryCoverObserver=observer;
+  covers.forEach(function(img){observer.observe(img)});
  }else{
   // 旧浏览器没有观察器时仍保证封面可用，只是不做延迟加载。
   covers.forEach(function(img){_loadCardCover(img,generation)});
  }
+ // iOS 快速甩动或加载更多时，观察器回调可能晚于可视区域变化；滚动兜底会补齐漏网封面。
+ _queueCoverFallback();
 }
+window.addEventListener('scroll',_queueCoverFallback,{passive:true});
+window.addEventListener('resize',_queueCoverFallback);
 function renderLibrary(filter){
  if(!LIB_DATA.length)return;
  var generation=++_libraryRenderGeneration;
