@@ -119,8 +119,9 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('../../bg.p
 .ld-mode{margin-bottom:10px}
 .ld-close{margin-top:14px;width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:rgba(255,255,255,0.6);cursor:pointer;font-size:13px;font-family:inherit;color:#475569}
 .ld-close:hover{background:rgba(255,255,255,0.9)}
-.lib-detail .dd{background:#ffffff;border-radius:0px;padding:24px;width:500px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative;z-index:0;overflow:hidden;transition:background .4s}
-.ld-blur-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(5px) brightness(0.7);opacity:0.25;z-index:-1;pointer-events:none;border-radius:5px}
+.lib-detail .dd{background:#ffffff;border-radius:0px;padding:24px;width:500px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.2);position:relative;z-index:0;isolation:isolate;overflow:hidden;transition:background .4s}
+.ld-blur-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(5px) brightness(0.65);opacity:0.35;z-index:0;pointer-events:none;border-radius:5px}.ld-blur-bg::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.7)}
+.lib-detail .dd>:not(.ld-blur-bg){position:relative;z-index:1}
 .ld-header{position:relative;height:120px;margin-bottom:16px}
 .ld-cover{position:absolute;left:-5px;top:-7px;width:120px;height:120px;border-radius:0px;object-fit:cover;background:#f1f5f9}
 .ld-name{position:absolute;left:131px;top:-4px;right:0;font-family:inherit;font-size:16px;color:#1e293b;font-weight:700;line-height:1.35;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}

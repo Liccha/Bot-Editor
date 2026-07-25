@@ -150,7 +150,32 @@ function heartToggle(id){ if(_LIKED.has(id)) doUnlike(id); else doLike(id); }
 window.heartToggle=heartToggle;
 window.addEventListener('online',_replayQueue);
 
-var _libraryRenderGeneration=0,_librarySearchTimer=0,_libraryMarqueeTimer=0,_libraryAssetTimer=0;
+var _libraryRenderGeneration=0,_librarySearchTimer=0,_libraryMarqueeTimer=0,_libraryCoverObserver=null;
+function _loadCardCover(img,generation){
+ if(!img||!img.isConnected||img.dataset.coverLoading==='1')return;
+ var url=img.dataset.cover||'';if(!url)return;
+ img.dataset.coverLoading='1';
+ loadAsset(url,function(src){
+  if(generation!==_libraryRenderGeneration||!img.isConnected)return;
+  img.src=src||url;
+  img.dataset.coverLoaded='1';
+  delete img.dataset.coverLoading;
+ });
+}
+function _observeCardCovers(grid,generation){
+ if(_libraryCoverObserver){_libraryCoverObserver.disconnect();_libraryCoverObserver=null}
+ var covers=grid.querySelectorAll('.lib-card .cv[data-cover]');
+ if(!covers.length)return;
+ if('IntersectionObserver' in window){
+  _libraryCoverObserver=new IntersectionObserver(function(entries){
+   entries.forEach(function(entry){if(entry.isIntersecting){_libraryCoverObserver.unobserve(entry.target);_loadCardCover(entry.target,generation)}});
+  },{rootMargin:'480px 0px'});
+  covers.forEach(function(img){_libraryCoverObserver.observe(img)});
+ }else{
+  // 旧浏览器没有观察器时仍保证封面可用，只是不做延迟加载。
+  covers.forEach(function(img){_loadCardCover(img,generation)});
+ }
+}
 function renderLibrary(filter){
  if(!LIB_DATA.length)return;
  var generation=++_libraryRenderGeneration;
@@ -186,7 +211,7 @@ function renderLibrary(filter){
     {v:hasCatch,label:"Catch",bg:cfg.bgCatch||"#fce7f3",cl:cfg.colorCatch||"#9d174d"}
    ].forEach(function(tp){if(tp.v)tags+="<span style=\"background:"+tp.bg+";color:"+tp.cl+"\">"+tp.label+"</span>"});
   }
-  html+="<div class=\"lib-card\" data-idx="+i+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" src=\""+cov+"?v=2\"":"")+" width=\"80\" height=\"80\" loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" onerror=\"this.removeAttribute('src')\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
+  html+="<div class=\"lib-card\" data-idx="+i+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" data-cover=\""+escHtml(cov)+"\"":"")+" width=\"80\" height=\"80\" decoding=\"async\" referrerpolicy=\"no-referrer\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
   rendered++;
  }
  var grid=document.getElementById("libGrid");grid.onclick=function(e){var h=e.target.closest(".heart");if(h){e.stopPropagation();var hid=parseInt(h.dataset.hid);if(!isNaN(hid))heartToggle(hid);return}var card=e.target.closest(".lib-card");if(card){var idx=parseInt(card.dataset.idx);if(!isNaN(idx)){playSong(idx,card);showSongDetail(idx)}}};
@@ -235,15 +260,8 @@ function renderLibrary(filter){
 	  });
 	 });
 	},400);
- // 封面缓存：用 Cache API 替换 img.src，下次直接从硬盘读取
- clearTimeout(_libraryAssetTimer);
- _libraryAssetTimer=setTimeout(function(){
-	 if(generation!==_libraryRenderGeneration)return;
-	 grid.querySelectorAll('.lib-card .cv[src]').forEach(function(img){
-	  var url=img.getAttribute('src');if(!url)return;
-	  loadAsset(url,function(bu){if(generation===_libraryRenderGeneration&&img.isConnected&&img.getAttribute('src')!==bu)img.src=bu});
-	 });
-	},0);
+ // 封面只在进入当前视口附近时加载；加载更多后的新卡片也会重新建立观察。
+ _observeCardCovers(grid,generation);
  var total=LIB_DATA.length-hidden;
  document.getElementById("libStats").textContent=(filter?"Found "+count+"/"+total:total+" songs");
 }
