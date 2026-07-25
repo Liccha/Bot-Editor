@@ -155,13 +155,22 @@ var _libraryCoverGrid=null,_libraryCoverGeneration=0,_libraryCoverFallbackFrame=
 function _loadCardCover(img,generation){
  if(!img||!img.isConnected||img.dataset.coverLoading==='1')return;
  var url=img.dataset.cover||'';if(!url)return;
+ // 主列表封面使用浏览器原生图片加载：滚到可视区域就直接请求原地址。
+ // 不经过 Cache API / Blob URL 的人工数量上限，避免长列表在 iOS 中被缓存队列卡住。
+ if(generation!==_libraryRenderGeneration)return;
  img.dataset.coverLoading='1';
- loadAsset(url,function(src){
+ img.onload=function(){
   if(generation!==_libraryRenderGeneration||!img.isConnected)return;
-  img.src=src||url;
   img.dataset.coverLoaded='1';
   delete img.dataset.coverLoading;
- });
+  img.onload=null;img.onerror=null;
+ };
+ img.onerror=function(){
+  // 保留原地址，网络恢复或下次重新渲染时仍可由浏览器正常重试。
+  delete img.dataset.coverLoading;
+  img.onerror=null;
+ };
+ img.src=url;
 }
 function _loadCoversNearViewport(){
  var grid=_libraryCoverGrid,generation=_libraryCoverGeneration;
