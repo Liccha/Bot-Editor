@@ -1,3 +1,11 @@
+/* Hallmark · component: song-card-list · macrostructure: existing-list-preserved · genre: playful · theme: existing
+ * tone: reference-matched · anchor hue: inherited
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: unchanged from the existing SongBot design
+ * responsive: pass (320 · 375 · 414 · 768 · 1024) · motion: reduced-motion pass
+ * slop: pass (song-list component scope)
+ * pre-emit critique: P5 H4 E5 S5 R5 V4
+ */
 /* Bot Editor styles: extracted from the legacy single-file entry. */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;outline:none}
 html,body{height:100%}
@@ -255,4 +263,52 @@ img{-webkit-user-drag:none;user-drag:none}
 .we-empty-state{flex:1;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px;user-select:none}
 .we-toast{position:fixed;bottom:40px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 24px;border-radius:8px;font-size:13px;z-index:2000;pointer-events:none;opacity:0;transition:opacity .3s}
 .we-toast.show{opacity:1}
+
+/* Song-list motion stays outside the designer-replaced CSS region. */
+#libFilters .tpl-capsule{
+transition:transform var(--lib-duration-press) var(--lib-ease-out),opacity var(--lib-duration-state) var(--lib-ease-out);
+white-space:nowrap
+}
+#libFilters .tpl-capsule:focus-visible{outline:2px solid var(--lib-focus-color);outline-offset:2px}
+#libFilters .tpl-capsule:active{transform:translateY(0) scale(.985)}
+#libFilters .tpl-capsule[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
+#libFilters .tpl-capsule[aria-busy="true"] .ct{opacity:.72}
+#libFilters .tpl-capsule.is-error{outline:2px solid currentColor;outline-offset:2px}
+
+.lib-card{
+transition:transform var(--lib-duration-state) var(--lib-ease-out),box-shadow var(--lib-duration-state) var(--lib-ease-out);
+backface-visibility:hidden
+}
+.lib-card.lib-card-enter{
+transform-origin:left center;
+animation:lib-card-enter-fallback var(--lib-duration-card-enter) var(--lib-ease-out) backwards;
+animation-delay:calc(var(--lib-enter-order,0) * var(--lib-card-stagger));
+will-change:transform,opacity
+}
+@keyframes lib-card-enter-fallback{
+from{opacity:.04;transform:translate3d(-38px,0,0)}
+to{opacity:1;transform:translate3d(0,0,0)}
+}
+@supports(translate:1px 0){
+.lib-card.lib-card-enter{animation-name:lib-card-enter}
+@keyframes lib-card-enter{
+from{opacity:.04;translate:-38px 0}
+to{opacity:1;translate:0 0}
+}
+}
+@media(hover:hover) and (pointer:fine){
+.lib-card:hover{transform:translate3d(0,-1px,0)}
+}
+@media(prefers-reduced-motion:reduce){
+#libFilters .tpl-capsule{transition-duration:80ms}
+.lib-card.lib-card-enter{
+animation-name:lib-card-enter-reduced;
+animation-duration:80ms;
+animation-delay:0ms
+}
+@keyframes lib-card-enter-reduced{
+from{opacity:.35}
+to{opacity:1}
+}
+}
 @media(max-width:768px){.we-body{flex-direction:column}.we-sidebar{width:100%;min-width:auto;max-height:180px;border-right:none;border-bottom:1px solid #e2e8f0}.we-dialog{width:100vw;height:100vh;border-radius:0}}

@@ -3,6 +3,8 @@
 var LIB_DATA=[],_libFilter="ALL",_DS_CFG={shapes:[],card:{}};
 var _iosRenderBatch=48,_iosRenderLimit=48,_iosRenderKey="";
 var _desktopRenderBatch=120,_desktopRenderLimit=120,_desktopRenderKey="",_libraryMoreObserver=null;
+var _librarySongMeta=typeof WeakMap==="function"?new WeakMap():null;
+var _libraryRenderFrame=0,_libraryPendingControl=null,_libraryHasRendered=false;
 function _isIOSDevice(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||((navigator.platform==='MacIntel')&&navigator.maxTouchPoints>1)}
 try{var dc=document.getElementById("dsConfig");if(dc){_DS_CFG=JSON.parse(dc.textContent);document.documentElement.style.setProperty("--card-w",_DS_CFG.card&&_DS_CFG.card.w||700);document.documentElement.style.setProperty("--card-h",_DS_CFG.card&&_DS_CFG.card.h||110)}}catch(e){}
 var _dsFilters={font:'方正粗圆简体',fontSize:16,borderRadius:50,capsuleWidth:110,capsuleHeight:42,fontScaleX:1,unselectedBgColor:'#ffffff',unselectedBgOpacity:70,strokeColor:'#1e293b',strokeWidth:0,capsules:{ALL:{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'4K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'5K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'6K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},Catch:{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'}}};
@@ -208,46 +210,109 @@ function _observeCardCovers(grid,generation){
 }
 window.addEventListener('scroll',_queueCoverFallback,{passive:true});
 window.addEventListener('resize',_queueCoverFallback);
-function renderLibrary(filter){
+function _songLibraryMeta(song){
+ var cached=_librarySongMeta&&_librarySongMeta.get(song);
+ if(cached)return cached;
+ var modes={"4K":false,"5K":false,"6K":false,Catch:false};
+ (song.charts||[]).forEach(function(chart){
+  var hasNormal=false,hasCatch=false;
+  Object.keys(chart).forEach(function(key){
+   var difficulty=chart[key];
+   if(key==="mode"||!difficulty)return;
+   if(difficulty.isMode3)hasCatch=true;
+   else if(difficulty.level>0||difficulty.combo>0)hasNormal=true;
+  });
+  if(hasCatch)modes.Catch=true;
+  if(hasNormal&&(chart.mode==="4K"||chart.mode==="5K"||chart.mode==="6K"))modes[chart.mode]=true;
+ });
+ var meta={
+  modes:modes,
+  search:(String(song.name||"")+" "+String(song.artist||"")+" "+(song.charters||[]).join(" ")).toLowerCase()
+ };
+ if(_librarySongMeta)_librarySongMeta.set(song,meta);
+ return meta;
+}
+function _clearFilterBusy(control){
+ if(!control)return;
+ control.removeAttribute("aria-busy");
+ control.setAttribute("aria-disabled","false");
+}
+function _scheduleLibraryRender(filter,reveal,control){
+ if(_libraryRenderFrame){
+  cancelAnimationFrame(_libraryRenderFrame);
+  _libraryRenderFrame=0;
+ }
+ if(_libraryPendingControl&&_libraryPendingControl!==control)_clearFilterBusy(_libraryPendingControl);
+ _libraryPendingControl=control||null;
+ if(control){
+  control.setAttribute("aria-busy","true");
+  control.setAttribute("aria-disabled","true");
+ }
+ _libraryRenderFrame=requestAnimationFrame(function(){
+  _libraryRenderFrame=requestAnimationFrame(function(){
+   _libraryRenderFrame=0;
+   try{
+    renderLibrary(filter,{reveal:!!reveal});
+   }catch(error){
+    if(control){
+     control.classList.add("is-error");
+     setTimeout(function(){control.classList.remove("is-error")},600);
+    }
+    if(typeof toast==="function")toast("切换失败，请重试");
+    if(window.console&&console.error)console.error(error);
+   }finally{
+    _clearFilterBusy(control);
+    if(_libraryPendingControl===control)_libraryPendingControl=null;
+   }
+  });
+ });
+}
+function renderLibrary(filter,options){
  if(!LIB_DATA.length)return;
  var generation=++_libraryRenderGeneration;
  var today=new Date();today=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
  var q=(filter||"").toLowerCase(),html="",count=0,hidden=0,rendered=0;
+ var revealCards=!_libraryHasRendered||!!(options&&options.reveal);
  var iosBatch=_isIOSDevice(),renderKey=_libFilter+"\n"+q;
  if(iosBatch&&_iosRenderKey!==renderKey){_iosRenderKey=renderKey;_iosRenderLimit=_iosRenderBatch}
  if(!iosBatch&&_desktopRenderKey!==renderKey){_desktopRenderKey=renderKey;_desktopRenderLimit=_desktopRenderBatch}
  var renderLimit=iosBatch?_iosRenderLimit:_desktopRenderLimit;
  for(var i=0;i<LIB_DATA.length;i++){
-  var s=LIB_DATA[i];
+ var s=LIB_DATA[i];
   if(!s.name||s.name.trim()===""){hidden++;continue}
   if(s.albumDate&&s.albumDate>today){hidden++;continue}
-  if(_libFilter!=="ALL"){var hasMode=false;(s.charts||[]).forEach(function(c){if(_libFilter==="Catch"){var ok=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&c[k].isMode3});if(ok)hasMode=true}else{if(c.mode===_libFilter){var ok2=Object.keys(c).some(function(k){return k!=="mode"&&c[k]&&!c[k].isMode3&&(c[k].level>0||c[k].combo>0)});if(ok2)hasMode=true}}});if(!hasMode){hidden++;continue}}
-  if(q&&s.name.toLowerCase().indexOf(q)<0&&(s.artist||"").toLowerCase().indexOf(q)<0&&(s.charters||[]).join(" ").toLowerCase().indexOf(q)<0)continue;
+  var songMeta=_songLibraryMeta(s);
+  if(_libFilter!=="ALL"&&!songMeta.modes[_libFilter]){hidden++;continue}
+  if(q&&songMeta.search.indexOf(q)<0)continue;
   count++;
   if(rendered>=renderLimit)continue;
   var cov=s.cover||"";
   var tags="";
   if(_libFilter==="ALL"){
    var cfg=_DS_CFG.tags||{};
-   var has4K=false,has5K=false,has6K=false,hasCatch=false;
-   (s.charts||[]).forEach(function(c){
-    var isCatch=false;(Object.keys(c)).forEach(function(k){if(k!=="mode"&&c[k]&&c[k].isMode3)isCatch=true});
-    if(isCatch)hasCatch=true;
-    else if(c.mode==="4K")has4K=true;
-    else if(c.mode==="5K")has5K=true;
-    else if(c.mode==="6K")has6K=true;
-   });
+   var has4K=songMeta.modes["4K"],has5K=songMeta.modes["5K"],has6K=songMeta.modes["6K"],hasCatch=songMeta.modes.Catch;
    [{v:has4K,label:"4键",bg:cfg.bg4k||"#dbeafe",cl:cfg.color4k||"#1e40af"},
     {v:has5K,label:"5键",bg:cfg.bg5k||"#dbeafe",cl:cfg.color5k||"#1e40af"},
     {v:has6K,label:"6键",bg:cfg.bg6k||"#dbeafe",cl:cfg.color6k||"#1e40af"},
     {v:hasCatch,label:"Catch",bg:cfg.bgCatch||"#fce7f3",cl:cfg.colorCatch||"#9d174d"}
    ].forEach(function(tp){if(tp.v)tags+="<span style=\"background:"+tp.bg+";color:"+tp.cl+"\">"+tp.label+"</span>"});
   }
-  html+="<div class=\"lib-card\" data-idx="+i+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" data-cover=\""+escHtml(cov)+"\"":"")+" width=\"80\" height=\"80\" decoding=\"async\" referrerpolicy=\"no-referrer\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
+  var enterClass=revealCards&&rendered<9?" lib-card-enter":"";
+  var enterStyle=revealCards&&rendered<9?' style="--lib-enter-order:'+rendered+'"':"";
+  html+="<div class=\"lib-card"+enterClass+"\" data-idx="+i+enterStyle+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" data-cover=\""+escHtml(cov)+"\"":"")+" width=\"80\" height=\"80\" decoding=\"async\" referrerpolicy=\"no-referrer\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
   rendered++;
  }
  var grid=document.getElementById("libGrid");grid.onclick=function(e){var h=e.target.closest(".heart");if(h){e.stopPropagation();var hid=parseInt(h.dataset.hid);if(!isNaN(hid))heartToggle(hid);return}var card=e.target.closest(".lib-card");if(card){var idx=parseInt(card.dataset.idx);if(!isNaN(idx)){playSong(idx,card);showSongDetail(idx)}}};
  grid.innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
+ _libraryHasRendered=true;
+ grid.querySelectorAll(".lib-card-enter").forEach(function(card){
+  var cleanup=function(){
+   card.classList.remove("lib-card-enter");
+   card.style.removeProperty("--lib-enter-order");
+  };
+  card.addEventListener("animationend",cleanup,{once:true});
+  setTimeout(cleanup,700);
+ });
  if(_libraryMoreObserver){_libraryMoreObserver.disconnect();_libraryMoreObserver=null}
  if(count>rendered){
   var more=document.createElement('button');more.type='button';more.textContent='加载更多（'+rendered+'/'+count+'）';more.style.cssText='grid-column:1/-1;margin:12px auto 24px;padding:10px 22px;border:1px solid #cbd5e1;border-radius:20px;background:#fff;color:#475569;font:inherit;cursor:pointer';
@@ -299,7 +364,26 @@ function renderLibrary(filter){
 }
 	 
 	
-document.getElementById("libFilters").addEventListener("click",function(e){var el=e.target.closest('[data-flt]');if(el){_libFilter=el.dataset.flt;document.querySelectorAll("#libFilters .tpl-capsule").forEach(function(s){s.classList.remove("active")});el.classList.add("active");var q=document.getElementById("libSearch").value;clearTimeout(_librarySearchTimer);requestAnimationFrame(function(){renderLibrary(q)})}});
+var _libraryFilters=document.getElementById("libFilters");
+_libraryFilters.addEventListener("click",function(e){
+ var el=e.target.closest('[data-flt]');
+ if(!el||el.getAttribute("aria-disabled")==="true"||_libFilter===el.dataset.flt)return;
+ _libFilter=el.dataset.flt;
+ _libraryFilters.querySelectorAll(".tpl-capsule").forEach(function(control){
+  var selected=control===el;
+  control.classList.toggle("active",selected);
+  control.setAttribute("aria-pressed",selected?"true":"false");
+ });
+ var q=document.getElementById("libSearch").value;
+ clearTimeout(_librarySearchTimer);
+ _scheduleLibraryRender(q,true,el);
+});
+_libraryFilters.addEventListener("keydown",function(e){
+ var el=e.target.closest('[data-flt]');
+ if(!el||(e.key!=="Enter"&&e.key!==" "))return;
+ e.preventDefault();
+ el.click();
+});
 document.getElementById("libSearch").addEventListener("input",function(){var q=this.value;clearTimeout(_librarySearchTimer);_librarySearchTimer=setTimeout(function(){renderLibrary(q)},120)});
 document.getElementById("libTip").addEventListener("click",function(){var t=document.getElementById('toast');t.textContent='歌曲信息无法展示时，请使用科学上网';t.classList.add('show');setTimeout(function(){t.classList.remove('show')},3500)});
 
