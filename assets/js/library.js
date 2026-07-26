@@ -267,6 +267,19 @@ function _scheduleLibraryRender(filter,reveal,control){
   });
  });
 }
+function _clipCardTextToHeart(grid){
+ var bounds=[];
+ grid.querySelectorAll(".lib-card").forEach(function(card){
+  var heart=card.querySelector(".heart");
+  var zoneLeft=(heart&&heart.offsetParent)?(heart.offsetLeft-6):card.clientWidth;
+  card.querySelectorAll(".na, .ar").forEach(function(el){
+   bounds.push({el:el,width:Math.max(10,zoneLeft-el.offsetLeft)});
+  });
+ });
+ bounds.forEach(function(item){
+  item.el.style.width=item.width+"px";
+ });
+}
 function renderLibrary(filter,options){
  if(!LIB_DATA.length)return;
  var generation=++_libraryRenderGeneration;
@@ -304,6 +317,7 @@ function renderLibrary(filter,options){
  }
  var grid=document.getElementById("libGrid");grid.onclick=function(e){var h=e.target.closest(".heart");if(h){e.stopPropagation();var hid=parseInt(h.dataset.hid);if(!isNaN(hid))heartToggle(hid);return}var card=e.target.closest(".lib-card");if(card){var idx=parseInt(card.dataset.idx);if(!isNaN(idx)){playSong(idx,card);showSongDetail(idx)}}};
  grid.innerHTML=html||"<div style=\"text-align:center;color:#94a3b8;padding:40px\">No results</div>";
+ _clipCardTextToHeart(grid);
  _libraryHasRendered=true;
  grid.querySelectorAll(".lib-card-enter").forEach(function(card){
   var cleanup=function(){
