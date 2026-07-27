@@ -544,7 +544,7 @@ function showSongDetail(idx){
   +'<img class="ld-cover" src="'+escHtml(covSrc)+'" onerror="this.removeAttribute(\'src\')">'
   +'<div class="ld-name">'+escHtml(s.name)+'</div>'
   +'<div class="ld-artist">'+escHtml(s.artist||"")+'</div>'
-  +'<div class="ld-charter">谱面：'+escHtml(charterStr)+'</div>'
+  +'<div class="ld-charter"><span class="ld-charter-label">谱面：</span><span class="ld-charter-name">'+escHtml(charterStr)+'</span></div>'
   +'<div class="ld-heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'
   +'</div>'
   +chartsHtml
@@ -578,6 +578,7 @@ function showSongDetail(idx){
    var pp=window._dsPopup||(_DS_CFG&&_DS_CFG.popup)||{};
    var isName=el.classList.contains('ld-name');
    var isArtist=el.classList.contains('ld-artist');
+   var isCharter=!isName&&!isArtist;
    var leftX=isName?pp.naX:(isArtist?pp.arX:pp.chX);if(leftX==null)leftX=96;
    var rightX;
    if(isName||isArtist){
@@ -590,25 +591,36 @@ function showSongDetail(idx){
    var topY=isName?pp.naY:(isArtist?pp.arY:pp.chY);
    if(topY==null)topY=isName?4:(isArtist?28:50);
    var maxW=Math.max(10,rightX-leftX);
-   var txt=el.textContent;
+   var contentEl=el;
+   if(isCharter){
+    var charterLabel=el.querySelector('.ld-charter-label');
+    contentEl=el.querySelector('.ld-charter-name');
+    el.style.display='flex';el.style.alignItems='center';
+    if(charterLabel){charterLabel.style.flex='0 0 auto'}
+    if(contentEl){contentEl.style.flex='1 1 auto';contentEl.style.minWidth='0'}
+   }
+   if(!contentEl)return;
+   var txt=contentEl.textContent;
    // 固定裁剪框：左右界即隐形文字框，超出部分由 overflow:hidden 裁掉
    // top 同步 _dsPopup，保证实际弹窗位置与设计器预览一致(生成CSS仅在注入保存后才生效)
    el.style.animation='none';
    el.style.left=leftX+'px';el.style.right='auto';el.style.top=topY+'px';
    el.style.width=maxW+'px';
    el.style.overflow='hidden';el.style.whiteSpace='nowrap';el.style.textOverflow='clip';
+   contentEl.style.overflow='hidden';contentEl.style.whiteSpace='nowrap';contentEl.style.textOverflow='clip';
+   var contentMaxW=isCharter?contentEl.getBoundingClientRect().width:maxW;
    // 测量文字自然宽度
-   el.innerHTML='<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>';
-   var textW=el.firstChild.getBoundingClientRect().width;
+   contentEl.innerHTML='<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>';
+   var textW=contentEl.firstChild.getBoundingClientRect().width;
    // 仅当文字宽度超过裁剪框才滚动
-   if(textW>maxW+2&&!reduceMotion){
-    var gapPx=Math.round(maxW*0.3);
-    el.innerHTML='<div class="ld-mq" style="display:inline-block;white-space:nowrap;will-change:transform">'
+   if(textW>contentMaxW+2&&!reduceMotion){
+    var gapPx=Math.round(contentMaxW*0.3);
+    contentEl.innerHTML='<div class="ld-mq" style="display:inline-block;white-space:nowrap;will-change:transform">'
      +'<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>'
      +'<span style="display:inline-block;width:'+gapPx+'px"></span>'
      +'<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>'
      +'</div>';
-    var mq=el.firstChild;
+    var mq=contentEl.firstChild;
     var span1W=mq.querySelector('span').getBoundingClientRect().width;
     var offset=Math.ceil(span1W+gapPx);
     mq.style.setProperty('--marquee-step',(-offset)+'px');
