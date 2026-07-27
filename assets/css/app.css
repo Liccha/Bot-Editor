@@ -315,7 +315,7 @@ to{opacity:1}
 
 /* Hallmark · component: song-card-surface · genre: playful · theme: studied-DNA (source: user-supplied image/video)
  * typography: inherited unchanged · interaction: inherited unchanged
- * material: softened top-dark/bottom-light blue laminate · 90% proportional song-strip geometry · RM-inspired electric-blue cover ring
+ * material: softened top-dark/bottom-light blue laminate · full-width strip with 90% vertical/inner geometry · RM-inspired electric-blue cover ring
  * pre-emit critique: P5 H5 E5 S5 R5 V5
  */
 :root{
@@ -348,7 +348,7 @@ to{opacity:1}
 --song-card-shadow:oklch(16% 0.030 276 / .24);
 --song-card-highlight:oklch(94% 0.040 254 / .30);
 --song-card-text-safe:4px;
---song-card-width:90%;
+--song-card-width:100%;
 --song-card-height:99px;
 --song-card-radius-main:54px;
 --song-card-radius-corner:11px;
@@ -502,7 +502,7 @@ left:225px
 }
 #libGrid .lib-card .heart{
 --heart-color:var(--song-card-heart);
-right:14px;
+right:16px;
 top:9px;
 font-size:var(--song-card-heart-size);
 color:var(--heart-color)
