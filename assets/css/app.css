@@ -315,27 +315,27 @@ to{opacity:1}
 
 /* Hallmark · component: song-card-surface · genre: playful · theme: studied-DNA (source: user-supplied image/video)
  * typography: inherited unchanged · interaction: inherited unchanged
- * material: lighter top-dark/bottom-light blue laminate · broad angular facets · RM-inspired electric-blue cover ring
+ * material: softened top-dark/bottom-light blue laminate · 90% proportional song-strip geometry · RM-inspired electric-blue cover ring
  * pre-emit critique: P5 H5 E5 S5 R5 V5
  */
 :root{
---song-card-shell-top:oklch(45% 0.138 269);
---song-card-shell-bottom:oklch(63% 0.150 262);
---song-card-shell-deep:oklch(37% 0.105 271);
---song-card-slot-top:oklch(23% 0.020 253);
---song-card-slot-bottom:oklch(19% 0.014 253);
---song-card-panel-top:oklch(46% 0.142 268);
---song-card-panel-bottom:oklch(65.5% 0.153 261);
---song-card-panel-facet-dark:oklch(36% 0.095 271 / .60);
---song-card-panel-facet-mid:oklch(52% 0.125 266 / .48);
---song-card-panel-facet-light:oklch(77% 0.120 254 / .28);
---song-card-panel-bottom-glow:oklch(82% 0.120 252 / .18);
---song-card-edge:oklch(78% 0.130 258);
---song-card-edge-soft:oklch(76% 0.110 260 / .40);
---song-card-ring-deep:oklch(38% 0.148 267);
---song-card-ring-blue:oklch(59% 0.156 263);
---song-card-ring-cyan:oklch(72% 0.135 255);
---song-card-ring-glow:oklch(72% 0.135 255 / .28);
+--song-card-shell-top:oklch(47% 0.132 269);
+--song-card-shell-bottom:oklch(65% 0.144 262);
+--song-card-shell-deep:oklch(39% 0.100 271);
+--song-card-slot-top:oklch(25% 0.019 253);
+--song-card-slot-bottom:oklch(21% 0.013 253);
+--song-card-panel-top:oklch(48% 0.136 268);
+--song-card-panel-bottom:oklch(67.5% 0.147 261);
+--song-card-panel-facet-dark:oklch(38% 0.090 271 / .58);
+--song-card-panel-facet-mid:oklch(54% 0.120 266 / .46);
+--song-card-panel-facet-light:oklch(79% 0.114 254 / .27);
+--song-card-panel-bottom-glow:oklch(84% 0.114 252 / .17);
+--song-card-edge:oklch(80% 0.124 258);
+--song-card-edge-soft:oklch(78% 0.105 260 / .38);
+--song-card-ring-deep:oklch(40% 0.142 267);
+--song-card-ring-blue:oklch(61% 0.150 263);
+--song-card-ring-cyan:oklch(74% 0.129 255);
+--song-card-ring-glow:oklch(74% 0.129 255 / .26);
 --song-card-ring-glint:oklch(96% 0.017 256);
 --song-card-ring-glint-soft:oklch(86% 0.080 252 / .58);
 --song-card-mask-ink:oklch(20% 0.010 260);
@@ -347,13 +347,44 @@ to{opacity:1}
 --song-card-count:oklch(82% 0.032 240);
 --song-card-shadow:oklch(16% 0.030 276 / .24);
 --song-card-highlight:oklch(94% 0.040 254 / .30);
---song-card-text-safe:4px
+--song-card-text-safe:4px;
+--song-card-width:90%;
+--song-card-height:99px;
+--song-card-radius-main:54px;
+--song-card-radius-corner:11px;
+--song-card-cover-size:108px;
+--song-card-cover-left:-17px;
+--song-card-cover-top:-5px;
+--song-card-ring-size:121px;
+--song-card-ring-left:-21px;
+--song-card-ring-top:-9px;
+--song-card-ring-glint-width:3.6px;
+--song-card-gap:18px;
+--song-card-gap-mobile:72px;
+--song-card-mobile-margin-bottom:calc(.1413 * (100vw - 40px) - 102.6px);
+--song-card-name-size:18.9px;
+--song-card-artist-size:11.7px;
+--song-card-meta-size:12.6px;
+--song-card-charter-size:9px;
+--song-card-heart-size:23.4px;
+--song-card-count-size:10.8px
 }
 
 /* Main-library song strips only. No popup, filter, page-background or font rules. */
+#libGrid{
+gap:var(--song-card-gap)
+}
 #libGrid .lib-card{
 isolation:isolate;
 overflow:visible;
+width:var(--song-card-width);
+min-height:var(--song-card-height);
+margin-inline:auto;
+border-radius:
+var(--song-card-radius-main)
+var(--song-card-radius-corner)
+var(--song-card-radius-main)
+var(--song-card-radius-main);
 background:
 linear-gradient(180deg,var(--song-card-shell-top) 0%,var(--song-card-shell-bottom) 100%);
 border-color:var(--song-card-edge-soft);
@@ -365,12 +396,12 @@ inset 0 -1px 0 var(--song-card-shell-deep)
 #libGrid .lib-card::before{
 content:"";
 position:absolute;
-left:-23px;
-top:-10px;
-width:134px;
-height:134px;
+left:var(--song-card-ring-left);
+top:var(--song-card-ring-top);
+width:var(--song-card-ring-size);
+height:var(--song-card-ring-size);
 box-sizing:border-box;
-padding:4px;
+padding:var(--song-card-ring-glint-width);
 z-index:4;
 border-radius:50%;
 background:
@@ -402,6 +433,10 @@ z-index:2
 }
 #libGrid .lib-card .cv{
 z-index:3;
+left:var(--song-card-cover-left);
+top:var(--song-card-cover-top);
+width:var(--song-card-cover-size);
+height:var(--song-card-cover-size);
 border-color:var(--song-card-ring-cyan);
 box-shadow:
 0 0 0 2px var(--song-card-ring-deep),
@@ -410,12 +445,16 @@ box-shadow:
 0 7px 20px var(--song-card-shadow)
 }
 #libGrid .lib-card .sh0{
+top:70px;
+height:29px;
 background:
 linear-gradient(180deg,var(--song-card-slot-top) 0%,var(--song-card-slot-bottom) 100%);
 border-top:1px solid var(--song-card-rule);
 box-shadow:inset 0 4px 9px var(--song-card-slot-bottom)
 }
 #libGrid .lib-card .sh1{
+top:-3px;
+height:72px;
 background:
 linear-gradient(126deg,transparent 0 57%,var(--song-card-panel-facet-light) 57% 66%,transparent 66% 100%),
 linear-gradient(132deg,var(--song-card-panel-facet-dark) 0 18%,transparent 18% 55%,var(--song-card-panel-facet-mid) 55% 72%,transparent 72% 100%),
@@ -432,21 +471,45 @@ box-sizing:border-box;
 padding-inline-start:var(--song-card-text-safe)
 }
 #libGrid .lib-card .na{
+left:106px;
+top:5px;
+font-size:var(--song-card-name-size);
 color:var(--song-card-title)
 }
 #libGrid .lib-card .ar{
+left:106px;
+top:37px;
+font-size:var(--song-card-artist-size);
 color:var(--song-card-artist)
 }
 #libGrid .lib-card .bp,
 #libGrid .lib-card .du,
 #libGrid .lib-card .ch{
+top:77px;
+font-size:var(--song-card-charter-size);
 color:var(--song-card-meta)
+}
+#libGrid .lib-card .bp{
+left:100px;
+font-size:var(--song-card-meta-size)
+}
+#libGrid .lib-card .du{
+left:177px;
+font-size:var(--song-card-meta-size)
+}
+#libGrid .lib-card .ch{
+left:225px
 }
 #libGrid .lib-card .heart{
 --heart-color:var(--song-card-heart);
+right:14px;
+top:9px;
+font-size:var(--song-card-heart-size);
 color:var(--heart-color)
 }
 #libGrid .lib-card .heart .heart-n{
+font-size:var(--song-card-count-size);
+margin-top:2px;
 color:var(--song-card-count)
 }
 @keyframes song-cover-glint-in{
@@ -458,6 +521,14 @@ to{opacity:.62;transform:rotate(305deg)}
 #libGrid .lib-card:hover::before{
 opacity:1;
 transform:rotate(665deg)
+}
+}
+@media(max-width:768px){
+#libGrid{
+gap:var(--song-card-gap-mobile)
+}
+#libGrid .lib-card{
+margin-bottom:var(--song-card-mobile-margin-bottom)
 }
 }
 @media(prefers-reduced-motion:reduce){
