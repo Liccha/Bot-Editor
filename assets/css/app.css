@@ -279,6 +279,10 @@ white-space:nowrap
 transition:transform var(--lib-duration-state) var(--lib-ease-out),box-shadow var(--lib-duration-state) var(--lib-ease-out);
 backface-visibility:hidden
 }
+html.is-ios{
+--lib-duration-card-enter:var(--lib-duration-card-enter-ios);
+--lib-card-stagger:var(--lib-card-stagger-ios)
+}
 .lib-card.lib-card-enter{
 transform-origin:left center;
 animation:lib-card-enter-fallback var(--lib-duration-card-enter) var(--lib-ease-out) backwards;
@@ -301,10 +305,11 @@ to{opacity:1;translate:0 0}
 }
 @media(prefers-reduced-motion:reduce){
 #libFilters .tpl-capsule{transition-duration:80ms}
+html.is-ios{--lib-card-stagger:var(--lib-card-stagger-reduced)}
 .lib-card.lib-card-enter{
 animation-name:lib-card-enter-reduced;
-animation-duration:80ms;
-animation-delay:0ms
+animation-duration:var(--lib-duration-card-enter-reduced);
+animation-delay:calc(var(--lib-enter-order,0) * var(--lib-card-stagger))
 }
 @keyframes lib-card-enter-reduced{
 from{opacity:.35}
@@ -360,7 +365,7 @@ to{opacity:1}
 --song-card-ring-top:-9px;
 --song-card-ring-glint-width:3.6px;
 --song-card-gap:21.6px;
---song-card-gap-mobile:86.4px;
+--song-card-gap-mobile:97.4px;
 --song-card-mobile-margin-bottom:calc(.16956 * (100vw - 40px) - 123.12px);
 --song-card-name-size:18.9px;
 --song-card-artist-size:11.7px;
@@ -369,6 +374,7 @@ to{opacity:1}
 --song-card-heart-size:23.4px;
 --song-card-count-size:10.8px;
 --song-card-playing-spin:2250ms;
+--song-detail-playing-spin:2250ms
 }
 
 /* Main-library song strips only. No popup, filter, page-background or font rules. */
@@ -540,6 +546,38 @@ transform:rotate(665deg);
 transition:transform 900ms var(--lib-ease-out),opacity 900ms var(--lib-ease-out)
 }
 }
+@keyframes song-detail-glint-playing{
+from{transform:rotate(305deg)}
+to{transform:rotate(-55deg)}
+}
+@media(hover:none),(pointer:coarse){
+.lib-detail.is-playing .ld-header::before{
+content:"";
+position:absolute;
+left:var(--detail-play-left,-9px);
+top:var(--detail-play-top,-11px);
+width:var(--detail-play-width,128px);
+height:var(--detail-play-height,128px);
+box-sizing:border-box;
+padding:var(--song-card-ring-glint-width);
+z-index:4;
+border-radius:var(--detail-play-radius,0);
+background:
+conic-gradient(from 0deg,transparent 0 70%,var(--song-card-ring-glint-soft) 78%,var(--song-card-ring-glint) 84%,var(--song-card-ring-glint-soft) 90%,transparent 98% 100%);
+-webkit-mask:
+linear-gradient(var(--song-card-mask-ink) 0 0) content-box,
+linear-gradient(var(--song-card-mask-ink) 0 0);
+-webkit-mask-composite:xor;
+mask:
+linear-gradient(var(--song-card-mask-ink) 0 0) content-box,
+linear-gradient(var(--song-card-mask-ink) 0 0);
+mask-composite:exclude;
+pointer-events:none;
+opacity:1;
+transform-origin:center;
+animation:song-detail-glint-playing var(--song-detail-playing-spin) linear infinite
+}
+}
 @media(max-width:768px){
 #libGrid{
 gap:var(--song-card-gap-mobile)
@@ -556,5 +594,13 @@ animation:none;
 transition:none;
 opacity:.64;
 transform:rotate(25deg)
+}
+@media(hover:none),(pointer:coarse){
+.lib-detail.is-playing .ld-header::before{
+animation:none;
+transition:none;
+opacity:.88;
+transform:rotate(25deg)
+}
 }
 }

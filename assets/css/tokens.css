@@ -7,6 +7,10 @@
   --lib-duration-state: 150ms;
   --lib-duration-card-enter: 300ms;
   --lib-card-stagger: 48ms;
+  --lib-duration-card-enter-ios: 380ms;
+  --lib-card-stagger-ios: 60ms;
+  --lib-duration-card-enter-reduced: 50ms;
+  --lib-card-stagger-reduced: 72ms;
   --lib-focus-color: #2563eb;
   --lib-focus-color: oklch(62% 0.19 255);
 }

@@ -6,6 +6,8 @@ var _desktopRenderBatch=120,_desktopRenderLimit=120,_desktopRenderKey="",_librar
 var _librarySongMeta=typeof WeakMap==="function"?new WeakMap():null;
 var _libraryRenderFrame=0,_libraryPendingControl=null,_libraryHasRendered=false;
 function _isIOSDevice(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||((navigator.platform==='MacIntel')&&navigator.maxTouchPoints>1)}
+var _libraryIsIOS=_isIOSDevice();
+if(_libraryIsIOS)document.documentElement.classList.add("is-ios");
 try{var dc=document.getElementById("dsConfig");if(dc){_DS_CFG=JSON.parse(dc.textContent);document.documentElement.style.setProperty("--card-w",_DS_CFG.card&&_DS_CFG.card.w||700);document.documentElement.style.setProperty("--card-h",_DS_CFG.card&&_DS_CFG.card.h||110)}}catch(e){}
 var _dsFilters={font:'方正粗圆简体',fontSize:16,borderRadius:50,capsuleWidth:110,capsuleHeight:42,fontScaleX:1,unselectedBgColor:'#ffffff',unselectedBgOpacity:70,strokeColor:'#1e293b',strokeWidth:0,capsules:{ALL:{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'4K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'5K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},'6K':{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'},Catch:{gradLeft:'#3b82f6',gradRight:'#60a5fa',selectedColor:'#ffffff',unselectedColor:'#64748b'}}};
 (function(){try{if(_DS_CFG.filters){var f=_DS_CFG.filters;for(var k in f){if(k!=='capsules'&&k!=='selectedColor'&&k!=='unselectedColor'&&k!=='unselectedBg')_dsFilters[k]=f[k]}if(typeof f.unselectedBg==='string'){var m=f.unselectedBg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);if(m){_dsFilters.unselectedBgColor='#'+(+m[1]).toString(16).padStart(2,'0')+(+m[2]).toString(16).padStart(2,'0')+(+m[3]).toString(16).padStart(2,'0');if(m[4]!==undefined)_dsFilters.unselectedBgOpacity=Math.round(+m[4]*100)}}if(f.capsules)for(var k in f.capsules){var oc=f.capsules[k];var nc=_dsFilters.capsules[k]=Object.assign({},_dsFilters.capsules[k],oc);if(!nc.selectedColor&&f.selectedColor)nc.selectedColor=f.selectedColor;if(!nc.unselectedColor&&f.unselectedColor)nc.unselectedColor=f.unselectedColor}}}catch(e){}})();
@@ -286,7 +288,7 @@ function renderLibrary(filter,options){
  var today=new Date();today=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
  var q=(filter||"").toLowerCase(),html="",count=0,hidden=0,rendered=0;
  var revealCards=!_libraryHasRendered||!!(options&&options.reveal);
- var iosBatch=_isIOSDevice(),renderKey=_libFilter+"\n"+q;
+ var iosBatch=_libraryIsIOS,renderKey=_libFilter+"\n"+q;
  if(iosBatch&&_iosRenderKey!==renderKey){_iosRenderKey=renderKey;_iosRenderLimit=_iosRenderBatch}
  if(!iosBatch&&_desktopRenderKey!==renderKey){_desktopRenderKey=renderKey;_desktopRenderLimit=_desktopRenderBatch}
  var renderLimit=iosBatch?_iosRenderLimit:_desktopRenderLimit;
@@ -444,6 +446,7 @@ function playSong(idx,cardEl){
 	 stopCurrentSong();
 	 // 高亮当前（立即，不等缓存）
 	 if(cardEl){cardEl.classList.add("is-playing","has-played");cardEl.style.boxShadow="0 0 0 3px #3b82f6";var cv=cardEl.querySelector(".cv");if(cv)cv.style.animation="spin 8s linear infinite"}
+	 var detailEl=document.getElementById("libDetail");if(detailEl)detailEl.classList.add("is-playing");
 	 // 必须在点击事件的同步调用栈中 play()，否则 iOS 会丢失用户手势许可。
 	 // 已有 Blob 缓存时直接使用；首次播放走原地址，同时在后台填充 Cache API。
 	 var token=++_pendingPlay;
@@ -465,6 +468,7 @@ function playSong(idx,cardEl){
 	function _clearPlayingCardState(){
 	 document.querySelectorAll(".lib-card .cv").forEach(function(c){c.style.animation="none"});
 	 document.querySelectorAll(".lib-card").forEach(function(c){c.classList.remove("is-playing");c.style.boxShadow=""});
+	 var detailEl=document.getElementById("libDetail");if(detailEl)detailEl.classList.remove("is-playing");
 	}
 	window.stopCurrentSong=function(){
 	 ++_pendingPlay;
@@ -549,6 +553,16 @@ function showSongDetail(idx){
   +'</div>'
   +chartsHtml
   +'<button class="ld-close" onclick="stopCurrentSong();document.getElementById(\'libDetail\').classList.remove(\'show\')">关闭</button>';
+
+ var detailCover=dd.querySelector(".ld-cover"),detailHeader=dd.querySelector(".ld-header");
+ if(detailCover&&detailHeader){
+  var detailCoverStyle=getComputedStyle(detailCover);
+  detailHeader.style.setProperty("--detail-play-left",(detailCover.offsetLeft-4)+"px");
+  detailHeader.style.setProperty("--detail-play-top",(detailCover.offsetTop-4)+"px");
+  detailHeader.style.setProperty("--detail-play-width",(detailCover.offsetWidth+8)+"px");
+  detailHeader.style.setProperty("--detail-play-height",(detailCover.offsetHeight+8)+"px");
+  detailHeader.style.setProperty("--detail-play-radius",detailCoverStyle.borderRadius||"0");
+ }
 
  document.getElementById("libDetail").classList.add("show");
 	 // 小窗爱心：定位(来自 _dsPopup.heart) + 单击/双击
