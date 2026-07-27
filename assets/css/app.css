@@ -359,15 +359,16 @@ to{opacity:1}
 --song-card-ring-left:-21px;
 --song-card-ring-top:-9px;
 --song-card-ring-glint-width:3.6px;
---song-card-gap:18px;
---song-card-gap-mobile:72px;
---song-card-mobile-margin-bottom:calc(.1413 * (100vw - 40px) - 102.6px);
+--song-card-gap:21.6px;
+--song-card-gap-mobile:86.4px;
+--song-card-mobile-margin-bottom:calc(.16956 * (100vw - 40px) - 123.12px);
 --song-card-name-size:18.9px;
 --song-card-artist-size:11.7px;
 --song-card-meta-size:12.6px;
 --song-card-charter-size:9px;
 --song-card-heart-size:23.4px;
---song-card-count-size:10.8px
+--song-card-count-size:10.8px;
+--song-card-playing-spin:2250ms;
 }
 
 /* Main-library song strips only. No popup, filter, page-background or font rules. */
@@ -418,7 +419,7 @@ pointer-events:none;
 transform-origin:center;
 opacity:.62;
 transform:rotate(305deg);
-transition:transform 900ms var(--lib-ease-out),opacity 900ms var(--lib-ease-out);
+transition:transform 0ms linear,opacity 0ms linear;
 animation:song-cover-glint-in 900ms var(--lib-ease-out) backwards;
 animation-delay:calc(var(--lib-enter-order,0) * var(--lib-card-stagger))
 }
@@ -517,10 +518,26 @@ from{opacity:0;transform:rotate(-55deg)}
 55%{opacity:.96}
 to{opacity:.62;transform:rotate(305deg)}
 }
-@media(hover:hover) and (pointer:fine){
-#libGrid .lib-card:hover::before{
+@keyframes song-cover-glint-playing{
+from{transform:rotate(305deg)}
+to{transform:rotate(-55deg)}
+}
+#libGrid .lib-card.is-playing::before{
 opacity:1;
-transform:rotate(665deg)
+animation:song-cover-glint-playing var(--song-card-playing-spin) linear infinite;
+animation-delay:0s;
+will-change:transform
+}
+#libGrid .lib-card.has-played:not(.is-playing)::before{
+animation:none;
+opacity:.62;
+transform:rotate(305deg)
+}
+@media(hover:hover) and (pointer:fine){
+#libGrid .lib-card:not(.is-playing):hover::before{
+opacity:1;
+transform:rotate(665deg);
+transition:transform 900ms var(--lib-ease-out),opacity 900ms var(--lib-ease-out)
 }
 }
 @media(max-width:768px){
@@ -533,7 +550,8 @@ margin-bottom:var(--song-card-mobile-margin-bottom)
 }
 @media(prefers-reduced-motion:reduce){
 #libGrid .lib-card::before,
-#libGrid .lib-card:hover::before{
+#libGrid .lib-card:not(.is-playing):hover::before,
+#libGrid .lib-card.is-playing::before{
 animation:none;
 transition:none;
 opacity:.64;

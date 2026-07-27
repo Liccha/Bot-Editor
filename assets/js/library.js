@@ -443,7 +443,7 @@ function playSong(idx,cardEl){
 	 // 停止旧音频 & 清除高亮
 	 stopCurrentSong();
 	 // 高亮当前（立即，不等缓存）
-	 if(cardEl){cardEl.style.boxShadow="0 0 0 3px #3b82f6";var cv=cardEl.querySelector(".cv");if(cv)cv.style.animation="spin 8s linear infinite"}
+	 if(cardEl){cardEl.classList.add("is-playing","has-played");cardEl.style.boxShadow="0 0 0 3px #3b82f6";var cv=cardEl.querySelector(".cv");if(cv)cv.style.animation="spin 8s linear infinite"}
 	 // 必须在点击事件的同步调用栈中 play()，否则 iOS 会丢失用户手势许可。
 	 // 已有 Blob 缓存时直接使用；首次播放走原地址，同时在后台填充 Cache API。
 	 var token=++_pendingPlay;
@@ -464,7 +464,7 @@ function playSong(idx,cardEl){
 	}
 	function _clearPlayingCardState(){
 	 document.querySelectorAll(".lib-card .cv").forEach(function(c){c.style.animation="none"});
-	 document.querySelectorAll(".lib-card").forEach(function(c){c.style.boxShadow=""});
+	 document.querySelectorAll(".lib-card").forEach(function(c){c.classList.remove("is-playing");c.style.boxShadow=""});
 	}
 	window.stopCurrentSong=function(){
 	 ++_pendingPlay;
