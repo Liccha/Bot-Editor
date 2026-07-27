@@ -566,20 +566,29 @@ function showSongDetail(idx){
 	 var pp=window._dsPopup||(_DS_CFG&&_DS_CFG.popup)||{naX:96,naRight:350,arX:96,arRight:350};
 	 var nm=document.querySelector('.ld-name');if(nm){nm.style.left=(pp.naX||96)+'px';nm.style.right='auto';nm.style.width=((pp.naRight||350)-(pp.naX||96))+'px'}
 	 var ar=document.querySelector('.ld-artist');if(ar){ar.style.left=(pp.arX||96)+'px';ar.style.right='auto';ar.style.width=((pp.arRight||350)-(pp.arX||96))+'px'}
- // 小窗歌名/作者走马灯：.ld-name/.ld-artist 作为固定裁剪框(overflow:hidden，
- // 左右界由 naX/naRight、arX/arRight 决定)，内层 .ld-mq 承载双份文字并 translateX
- // 滚动、被裁剪框裁掉，与主界面卡片同一套算法；曲名/作者共用同一像素速度。
+ // 小窗歌名/作者/谱师走马灯：文字元素作为固定裁剪框(overflow:hidden)，
+ // 歌名与作者避开右上角爱心；谱师位于标题区底部，使用标题区右边界。
+ // 内层 .ld-mq 承载双份文字并 translateX，与主界面卡片共用同一套算法。
  setTimeout(function(){
   var isMobile=window.innerWidth<=768;
-  var pixelSpeed=isMobile?40:80; // px/s，曲名与作者共用 → 滚动速度一致
+  var pixelSpeed=isMobile?40:80; // px/s，三类文字共用 → 滚动速度一致
+  var reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var heartLeft=(_hEl&&_hEl.offsetParent)?(_hEl.offsetLeft-6):Infinity; // 爱心占位左界(相对标题区)，曲名/作者不得越过
-  document.querySelectorAll('.ld-name, .ld-artist').forEach(function(el){
+  document.querySelectorAll('.ld-name, .ld-artist, .ld-charter').forEach(function(el){
    var pp=window._dsPopup||(_DS_CFG&&_DS_CFG.popup)||{};
    var isName=el.classList.contains('ld-name');
-   var leftX=isName?pp.naX:pp.arX;if(leftX==null)leftX=96;
-   var rightX=isName?pp.naRight:pp.arRight;if(rightX==null)rightX=350;
-   rightX=Math.min(rightX,heartLeft); // 文字末端触及爱心占位左侧即截断/滚动
-   var topY=isName?pp.naY:pp.arY;if(topY==null)topY=isName?4:28;
+   var isArtist=el.classList.contains('ld-artist');
+   var leftX=isName?pp.naX:(isArtist?pp.arX:pp.chX);if(leftX==null)leftX=96;
+   var rightX;
+   if(isName||isArtist){
+    rightX=isName?pp.naRight:pp.arRight;if(rightX==null)rightX=350;
+    rightX=Math.min(rightX,heartLeft); // 上方文字末端触及爱心占位左侧即截断/滚动
+   }else{
+    var header=el.parentElement;
+    rightX=header&&header.clientWidth?header.clientWidth:500; // 谱师不与上方爱心重叠，保留完整可用宽度
+   }
+   var topY=isName?pp.naY:(isArtist?pp.arY:pp.chY);
+   if(topY==null)topY=isName?4:(isArtist?28:50);
    var maxW=Math.max(10,rightX-leftX);
    var txt=el.textContent;
    // 固定裁剪框：左右界即隐形文字框，超出部分由 overflow:hidden 裁掉
@@ -592,7 +601,7 @@ function showSongDetail(idx){
    el.innerHTML='<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>';
    var textW=el.firstChild.getBoundingClientRect().width;
    // 仅当文字宽度超过裁剪框才滚动
-   if(textW>maxW+2){
+   if(textW>maxW+2&&!reduceMotion){
     var gapPx=Math.round(maxW*0.3);
     el.innerHTML='<div class="ld-mq" style="display:inline-block;white-space:nowrap;will-change:transform">'
      +'<span style="display:inline-block;white-space:nowrap">'+escHtml(txt)+'</span>'
