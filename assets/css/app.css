@@ -365,8 +365,8 @@ to{opacity:1}
 --song-card-ring-top:-9px;
 --song-card-ring-glint-width:3.6px;
 --song-card-gap:21.6px;
---song-card-gap-mobile:97.4px;
---song-card-mobile-margin-bottom:calc(.16956 * (100vw - 40px) - 123.12px);
+--song-card-gap-mobile:89.535px;
+--song-card-mobile-margin-bottom:calc(.155869 * (100vw - 40px) - 113.178px);
 --song-card-name-size:18.9px;
 --song-card-artist-size:11.7px;
 --song-card-meta-size:12.6px;
