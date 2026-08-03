@@ -1,10 +1,17 @@
 /* Bot Editor module: designer.js */
 // ==================== 卡片设计器 (WYSIWYG v3) ====================
-	// 仅本机地址显示设计 tab
-	if(!IS_LOCAL_HOST){(function(){
-		var b=document.querySelector('[data-tab="design"]');if(b)b.style.display="none";
-		var t=document.getElementById("tabDesign");if(t)t.style.display="none";
-	})();}
+	// 初始 HTML 一律隐藏；只有确认是本机地址后才开放，避免正式站首屏闪现。
+	(function(){
+		var b=document.querySelector('[data-tab="design"]');
+		var t=document.getElementById("tabDesign");
+		if(IS_LOCAL_HOST){
+			if(b)b.removeAttribute("hidden");
+			if(t)t.removeAttribute("hidden");
+		}else{
+			if(b)b.setAttribute("hidden","");
+			if(t)t.setAttribute("hidden","");
+		}
+	})();
 
 	var _ds={
 		card:{w:700,h:110,bg:"rgba(255,255,255,0.85)",brTL:12,brTR:12,brBL:12,brBR:12,gap:8,mobileGap:12},
