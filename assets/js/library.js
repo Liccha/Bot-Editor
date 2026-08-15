@@ -15,17 +15,18 @@ function _hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(func
 function _unselectedBgCss(){var c=_hexToRgb(_dsFilters.unselectedBgColor||'#ffffff');return'rgba('+c.r+','+c.g+','+c.b+','+((_dsFilters.unselectedBgOpacity||0)/100)+')'}
 function applyFiltersCSS(){var f=_dsFilters;var s=document.getElementById('filterCapsuleStyles')||document.createElement('style');s.id='filterCapsuleStyles';var ff=f.font==='默认'?"'Microsoft YaHei',sans-serif":"'"+f.font+"','Microsoft YaHei',sans-serif";var stroke=f.strokeWidth>0?';-webkit-text-stroke:'+f.strokeWidth+'px '+f.strokeColor+';paint-order:stroke fill':' ';var css='#libFilters .tpl-capsule{font-family:'+ff+';font-size:'+f.fontSize+'px;border-radius:'+f.borderRadius+'px;background:'+_unselectedBgCss()+';width:'+f.capsuleWidth+'px;height:'+f.capsuleHeight+'px;overflow:hidden;box-sizing:border-box;border:none;font-weight:600;letter-spacing:.5px;box-shadow:inset 0 0 0 1px rgba(203,213,225,0.6),0 1px 3px rgba(0,0,0,0.04);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}';css+='#libFilters .tpl-capsule .ct{display:inline-block;transform:scaleX('+(f.fontScaleX||1)+')}';css+='#libFilters .tpl-capsule:hover{background:#fff;transform:translateY(-1px);box-shadow:inset 0 0 0 1px rgba(203,213,225,0.6),0 4px 12px rgba(0,0,0,0.1)}';['ALL','4K','5K','6K','Catch'].forEach(function(k){var c=f.capsules[k];if(!c)return;css+='#libFilters .tpl-capsule[data-flt="'+k+'"]{color:'+(c.unselectedColor||'#64748b')+'}';css+='#libFilters .tpl-capsule[data-flt="'+k+'"].active{color:'+(c.selectedColor||'#fff')+'!important;background:linear-gradient(90deg,'+c.gradLeft+','+c.gradRight+')!important;box-shadow:0 4px 14px '+c.gradLeft+'66,inset 0 1px 0 rgba(255,255,255,0.3);transform:translateY(-1px)'+stroke+'}'});css+='#libFilters .tpl-capsule.active:hover{filter:brightness(1.1)}';s.textContent=css;if(!s.parentNode)document.head.appendChild(s)}
 applyFiltersCSS();
-var _cacheVersion="v2";
+var _cacheVersion="v3-content-addressed";
 
 // ---- 持久化资源缓存：限制磁盘条目和内存 Blob 数，避免 iOS 长时间浏览后内存失控 ----
 var _assetCache=null,_assetCachePruned=false,_blobUrls={},_blobOrder=[],_assetPending={};
-var _ASSET_CACHE_NAME='songbot-assets-v2',_MAX_CACHE_ENTRIES=256,_MAX_BLOB_URLS=96;
+var _ASSET_CACHE_NAME='songbot-assets-v3',_MAX_CACHE_ENTRIES=256,_MAX_BLOB_URLS=96;
 function openAssetCache(){
  if(_assetCache)return Promise.resolve(_assetCache);
  if(!('caches' in window))return Promise.reject('no-caches');
  return caches.open(_ASSET_CACHE_NAME).then(function(c){
   _assetCache=c;
   caches.delete('songbot-assets-v1').catch(function(){});
+  caches.delete('songbot-assets-v2').catch(function(){});
   if(!_assetCachePruned){
    _assetCachePruned=true;
    c.keys().then(function(keys){
