@@ -15,7 +15,14 @@ var IS_LOCAL_HOST = location.hostname==='localhost'
 	|| location.hostname==='127.0.0.1'
 	|| location.hostname==='::1'
 	|| location.hostname==='[::1]';
-var API_BASE = IS_LOCAL_HOST ? '' : 'https://liccha.tailae715d.ts.net';
+var IS_VERCEL_HOST = location.hostname==='editor.teacharm.moe'
+	|| location.hostname==='bot-editor.vercel.app'
+	|| /\.vercel\.app$/i.test(location.hostname);
+// Vercel hosts use the stable same-origin /api rewrite. Non-Vercel mirrors
+// still talk directly to the current SongBot Funnel endpoint.
+var API_BASE = (IS_LOCAL_HOST || IS_VERCEL_HOST)
+	? ''
+	: 'https://win-mohsfa7n4b0.tailae715d.ts.net';
 var _trackUrl = API_BASE+'/api/visit';
 fetch(_trackUrl,{method:'POST'}).catch(function(){});
 

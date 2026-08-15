@@ -1,4 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/:path*"
+    }
+  ],
   "headers": [
     {
       "source": "/",
