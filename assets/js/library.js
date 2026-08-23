@@ -409,16 +409,17 @@ var _isAdmin=false;
 function _deviceId(){try{var k='_sbDev',v=localStorage.getItem(k);if(!v){v=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+''+Math.random().toString(16).slice(2));localStorage.setItem(k,v)}return v}catch(e){return 'nodev'}}
 function adminHeaders(extra){var h=extra||{};h['X-Admin-Device']=_deviceId();return h}
 function _applyAdminUI(){var b=document.querySelector('[data-tab="announce"]'),w=document.getElementById('weOpenBtn');if(b)b.style.display=_isAdmin?'':'none';if(w)w.style.display=_isAdmin?'inline-block':'none'}
-function _checkAdmin(){fetch(API_BASE+'/api/admin/check?d='+encodeURIComponent(_deviceId())).then(function(r){return r.json()}).then(function(d){_isAdmin=!!(d&&d.admin);_applyAdminUI()}).catch(function(){_isAdmin=false;_applyAdminUI()})}
+function _legacyAdminCheck(){return fetch(API_BASE+'/api/admin/check?d='+encodeURIComponent(_deviceId())).then(function(r){return r.json()})}
+function _checkAdmin(){fetch(API_BASE+'/api/announcement-cloud?action=admin-check',{headers:adminHeaders()}).then(function(r){if(!r.ok)throw new Error('cloud unavailable');return r.json()}).then(function(d){if(d&&d.admin)return d;if(window.ANNOUNCEMENT_CLOUD_REQUIRED)return d;return _legacyAdminCheck()}).then(function(d){_isAdmin=!!(d&&d.admin);_applyAdminUI();if(_isAdmin)window.dispatchEvent(new Event('announcement-admin-ready'))}).catch(function(){if(window.ANNOUNCEMENT_CLOUD_REQUIRED){_isAdmin=false;_applyAdminUI();return}_legacyAdminCheck().then(function(d){_isAdmin=!!(d&&d.admin);_applyAdminUI()}).catch(function(){_isAdmin=false;_applyAdminUI()})})}
 document.getElementById("libSearch").addEventListener("keydown",function(e){
  if(e.key!=='Enter')return;
  var v=this.value.trim();if(!/^[a-zA-Z]{6,40}$/.test(v))return; // 仅疑似暗号才发后端，普通搜索(含空格/中文/数字)不外传
- e.preventDefault();
  var self=this;
- fetch(API_BASE+'/api/admin/grant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({d:_deviceId(),p:v})})
-  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
-  .then(function(d){if(d&&d.admin){_isAdmin=true;_applyAdminUI();clearTimeout(_librarySearchTimer);self.value='';renderLibrary('');toast('管理员权限已激活')}else{toast('暗号错误')}})
-  .catch(function(){toast('管理员服务不可用')});
+ fetch(API_BASE+'/api/announcement-cloud?action=admin-grant',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Device':_deviceId()},body:JSON.stringify({d:_deviceId(),p:v})})
+  .then(function(r){if(!r.ok)throw new Error('cloud unavailable');return r.json()})
+  .catch(function(){if(window.ANNOUNCEMENT_CLOUD_REQUIRED)throw new Error('cloud unavailable');return fetch(API_BASE+'/api/admin/grant',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({d:_deviceId(),p:v})}).then(function(r){if(!r.ok)throw new Error('legacy unavailable');return r.json()})})
+  .then(function(d){if(d&&d.admin){_isAdmin=true;_applyAdminUI();clearTimeout(_librarySearchTimer);self.value='';renderLibrary('');window.dispatchEvent(new Event('announcement-admin-ready'));toast('管理员权限已激活')}})
+  .catch(function(){}); // 普通英文搜索和错误暗号都按搜索处理，不提示、不封禁
 });
 _checkAdmin();
 // 曲库现在是默认标签，页面加载即载入

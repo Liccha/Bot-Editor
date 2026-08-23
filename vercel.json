@@ -2,8 +2,40 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/:path*"
+      "source": "/api/fonts/:path*",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/fonts/:path*"
+    },
+    {
+      "source": "/api/design/:path*",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/design/:path*"
+    },
+    {
+      "source": "/api/mcz/:path*",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/mcz/:path*"
+    },
+    {
+      "source": "/api/excel/:path*",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/excel/:path*"
+    },
+    {
+      "source": "/api/blog/:path*",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/blog/:path*"
+    },
+    {
+      "source": "/api/admin/:path*",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/admin/:path*"
+    },
+    {
+      "source": "/api/visit",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/visit"
+    },
+    {
+      "source": "/api/meta",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/meta"
+    },
+    {
+      "source": "/api/like",
+      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/like"
     }
   ],
   "headers": [
