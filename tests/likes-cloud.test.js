@@ -19,11 +19,13 @@ const likeHandler = require('../api/like');
 const { getStore } = require('../api/_lib/storage');
 const { CURRENT_KEY } = require('../api/_lib/likes');
 
-function call(handler, method, { ip = '203.0.113.10', body, host = 'editor.teacharm.moe', origin = 'https://editor.teacharm.moe' } = {}) {
+function call(handler, method, { ip = '203.0.113.10', device, body, host = 'editor.teacharm.moe', origin = 'https://editor.teacharm.moe' } = {}) {
   return new Promise((resolve, reject) => {
+    const headers = { host, origin, 'x-forwarded-for': ip };
+    if (device) headers['x-like-device'] = device;
     const req = {
       method,
-      headers: { host, origin, 'x-forwarded-for': ip },
+      headers,
       body: body || {},
       socket: { remoteAddress: ip }
     };
@@ -77,6 +79,14 @@ test('different IPs increment independently and concurrent writes are serialized
   assert.equal(a.status, 200);
   assert.equal(b.status, 200);
   assert.equal((await call(metaHandler, 'GET', { ip: '203.0.113.22' })).body.likes['1087'], 4);
+});
+
+test('anonymous browser identity keeps liked state when its network IP changes', async () => {
+  const device = 'anonymous-device-0123456789abcdef';
+  const liked = await call(likeHandler, 'POST', { ip: '198.51.100.40', device, body: { id: 371 } });
+  assert.equal(liked.body.liked, true);
+  const afterNetworkChange = await call(metaHandler, 'GET', { ip: '198.51.100.41', device });
+  assert.ok(afterNetworkChange.body.likedToday.includes(371));
 });
 
 test('invalid song ids and cross-origin writes are rejected', async () => {

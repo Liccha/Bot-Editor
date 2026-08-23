@@ -17,8 +17,12 @@ function shanghaiDay() {
 }
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function visitorKey(req) {
+  const device = String(req.headers['x-like-device'] || '').trim();
+  const identity = /^[A-Za-z0-9_-]{16,100}$/.test(device)
+    ? `device:${device}`
+    : `ip:${clientIp(req)}`;
   return crypto.createHmac('sha256', config().sessionSecret)
-    .update(`song-like:${clientIp(req)}`)
+    .update(`song-like:${identity}`)
     .digest('base64url');
 }
 function emptyDocument() {

@@ -99,6 +99,16 @@ async function loadLibrary(){
 // ===== 点赞系统（卡片 + 小窗共用，按歌曲 id 计数）=====
 var _LIKES={},_LIKED=new Set(),_metaLoaded=false,_likeMutationVersion=0;
 // 用 SVG 心形，避免 ♥ 字形在手机端被 emoji/字体替换导致变扁变窄
+function _getLikeDevice(){
+ try{
+  var saved=localStorage.getItem('_sb_like_device');
+  if(saved&&/^[A-Za-z0-9_-]{16,100}$/.test(saved))return saved;
+  var fresh=(window.crypto&&typeof window.crypto.randomUUID==='function')?window.crypto.randomUUID():('device-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2));
+  localStorage.setItem('_sb_like_device',fresh);return fresh;
+ }catch(e){return 'memory-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2)}
+}
+var _LIKE_DEVICE=_getLikeDevice();
+function _likeHeaders(){return{'Content-Type':'application/json','X-Like-Device':_LIKE_DEVICE}}
 function _saveLikes(){try{localStorage.setItem('_sb_likes',JSON.stringify(_LIKES));localStorage.setItem('_sb_liked',JSON.stringify(Array.from(_LIKED)))}catch(e){}}
 	var _likeReplayTimer=0,_likeReplayActive=false;
 	function _enqueue(a,id){try{var q=JSON.parse(localStorage.getItem('_sb_likeQ')||'[]');q.push({a:a,id:id,ts:Date.now()});if(q.length>200)q=q.slice(-200);localStorage.setItem('_sb_likeQ',JSON.stringify(q))}catch(e){}}
@@ -110,7 +120,7 @@ function _saveLikes(){try{localStorage.setItem('_sb_likes',JSON.stringify(_LIKES
 	 var item=q[0];if(!item)return;
 	 _likeReplayActive=true;
 	 var m=item.a==='like'?'POST':'DELETE';
-	 fetch(API_BASE+'/api/like',{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify({id:item.id})})
+	 fetch(API_BASE+'/api/like',{method:m,headers:_likeHeaders(),body:JSON.stringify({id:item.id})})
 	  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){
 	   if(d&&Number.isFinite(Number(d.count))){_LIKES[item.id]=Number(d.count);if(d.liked)_LIKED.add(item.id);else _LIKED.delete(item.id);updateHeartUI(item.id);_saveLikes()}
 	   _likeReplayActive=false;
@@ -122,7 +132,7 @@ function loadMeta(){
  try{var d=JSON.parse(localStorage.getItem('_sb_likes')||'{}');_LIKES=d||{};var a=JSON.parse(localStorage.getItem('_sb_liked')||'[]');_LIKED=new Set(a||[])}catch(e){}
  _metaLoaded=true;updateAllHearts();
 	var requestVersion=_likeMutationVersion;
- fetch(API_BASE+'/api/meta').then(function(r){return r.json()}).then(function(d){
+ fetch(API_BASE+'/api/meta',{headers:{'X-Like-Device':_LIKE_DEVICE}}).then(function(r){return r.json()}).then(function(d){
 	if(requestVersion!==_likeMutationVersion)return;
   _LIKES=d.likes||{};_LIKED=new Set(d.likedToday||[]);_metaLoaded=true;
   updateAllHearts();_saveLikes();_replayQueue();
@@ -145,14 +155,14 @@ function doLike(id){
  if(_LIKED.has(id))return;
 	_likeMutationVersion++;
  _LIKED.add(id);_LIKES[id]=(_LIKES[id]||0)+1;updateHeartUI(id);_saveLikes();
- fetch(API_BASE+'/api/like',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+ fetch(API_BASE+'/api/like',{method:'POST',headers:_likeHeaders(),body:JSON.stringify({id:id})})
   .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){_LIKES[id]=Number(d.count)||0;if(d.liked)_LIKED.add(id);else _LIKED.delete(id);_saveLikes();updateHeartUI(id)}).catch(function(){_enqueue('like',id);_scheduleLikeReplay()});
 }
 function doUnlike(id){
  if(!_LIKED.has(id))return;
 	_likeMutationVersion++;
  _LIKED.delete(id);_LIKES[id]=Math.max(0,(_LIKES[id]||1)-1);updateHeartUI(id);_saveLikes();
- fetch(API_BASE+'/api/like',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})})
+ fetch(API_BASE+'/api/like',{method:'DELETE',headers:_likeHeaders(),body:JSON.stringify({id:id})})
   .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(d){_LIKES[id]=Number(d.count)||0;if(d.liked)_LIKED.add(id);else _LIKED.delete(id);_saveLikes();updateHeartUI(id)}).catch(function(){_enqueue('unlike',id);_scheduleLikeReplay()});
 }
 // 切换：点一下 +1，再点一下 -1（无需检测双击）
