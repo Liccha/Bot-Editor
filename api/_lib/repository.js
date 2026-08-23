@@ -5,6 +5,40 @@ const { config } = require('./config');
 const CURRENT_KEY = 'announcements/current.json';
 const DEVICES_KEY = 'security/admin-devices.json';
 
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+async function withLock(name, operation) {
+  const store = getStore();
+  const key = `locks/${name}.json`;
+  const token = crypto.randomUUID();
+  let acquired = false;
+  for (let attempt = 0; attempt < 20 && !acquired; attempt++) {
+    try {
+      await store.put(key, Buffer.from(JSON.stringify({ token, expiresAt: new Date(Date.now() + 45_000).toISOString() })), { forbidOverwrite: true });
+      acquired = true;
+    } catch (error) {
+      if (!(error.code === 'FileAlreadyExists' || error.code === 'ObjectAlreadyExists' || error.status === 409)) throw error;
+      try {
+        const current = await store.get(key);
+        const lock = current ? JSON.parse(current.body.toString('utf8')) : null;
+        if (!lock || String(lock.expiresAt || '') < now()) await store.delete(key);
+      } catch (readError) {
+        if (!(readError.status === 404 || readError.code === 'NoSuchKey')) throw readError;
+      }
+      if (!acquired) await sleep(200 + Math.floor(Math.random() * 150));
+    }
+  }
+  if (!acquired) { const error = new Error('announcement store is busy'); error.statusCode = 503; throw error; }
+  try {
+    return await operation();
+  } finally {
+    try {
+      const current = await store.get(key);
+      const lock = current ? JSON.parse(current.body.toString('utf8')) : null;
+      if (lock && lock.token === token) await store.delete(key);
+    } catch (_) {}
+  }
+}
+
 function now() { return new Date().toISOString(); }
 function shanghaiMinute() {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
@@ -65,21 +99,18 @@ async function readDocument() {
   if (!Array.isArray(document.items)) throw new Error('cloud announcement document is invalid');
   return { document, etag: object.etag };
 }
-async function writeDocument(document, etag, audit) {
+async function writeDocument(document, audit) {
   const store = getStore();
   const next = { ...document, schema: 2, revision: Number(document.revision || 0) + 1, updatedAt: now() };
   const body = Buffer.from(JSON.stringify(next));
   try {
-    const saved = await store.put(CURRENT_KEY, body, etag ? { ifMatch: etag } : { ifNoneMatch: true });
     const stamp = next.updatedAt.replace(/[:.]/g, '-');
-    await Promise.all([
-      store.put(`announcements/revisions/${stamp}-${crypto.randomUUID()}.json`, body),
-      writeAudit({ ...audit, documentRevision: next.revision })
-    ]);
+    await store.put(`announcements/revisions/${stamp}-${crypto.randomUUID()}.json`, body);
+    const saved = await store.put(CURRENT_KEY, body);
+    await writeAudit({ ...audit, documentRevision: next.revision });
     await writeDispatchIndex(next.items);
     return { document: next, etag: saved.etag };
   } catch (error) {
-    if (error.code === 'PreconditionFailed' || error.status === 412) { error.statusCode = 409; error.code = 'CONFLICT'; }
     throw error;
   }
 }
@@ -106,39 +137,45 @@ async function list(hiddenGroupId) {
   return { items: document.items.filter(i => !i.deletedAt).map(i => visible(i, hiddenGroupId)), etag, revision: document.revision };
 }
 async function create(raw, actor, hiddenGroupId) {
-  const state = await readDocument(); const item = normalizeItem(raw, null, hiddenGroupId);
-  await validateFiles(item);
-  state.document.items.push(item);
-  const saved = await writeDocument(state.document, state.etag, { event: 'ANNOUNCEMENT_CREATED', actor, after: item });
-  return { item: visible(item, hiddenGroupId), etag: saved.etag };
+  return withLock('announcements-current', async () => {
+    const state = await readDocument(); const item = normalizeItem(raw, null, hiddenGroupId);
+    await validateFiles(item);
+    state.document.items.push(item);
+    const saved = await writeDocument(state.document, { event: 'ANNOUNCEMENT_CREATED', actor, after: item });
+    return { item: visible(item, hiddenGroupId), etag: saved.etag };
+  });
 }
 async function update(id, raw, expectedRevision, actor, hiddenGroupId) {
-  const state = await readDocument(); const index = state.document.items.findIndex(i => i.id === id && !i.deletedAt);
-  if (index < 0) { const error = new Error('announcement not found'); error.statusCode = 404; throw error; }
-  const before = clone(state.document.items[index]);
-  if (before.status === 'claimed' && before.claim && before.claim.expiresAt >= now()) {
-    const error = new Error('announcement is currently being sent'); error.statusCode = 409; throw error;
-  }
-  if (expectedRevision != null && Number(expectedRevision) !== Number(before.revision)) {
-    const error = new Error('announcement changed; reload required'); error.statusCode = 409; throw error;
-  }
-  const item = normalizeItem(raw, before, hiddenGroupId); state.document.items[index] = item;
-  await validateFiles(item);
-  const saved = await writeDocument(state.document, state.etag, { event: 'ANNOUNCEMENT_UPDATED', actor, before, after: item });
-  return { item: visible(item, hiddenGroupId), etag: saved.etag };
+  return withLock('announcements-current', async () => {
+    const state = await readDocument(); const index = state.document.items.findIndex(i => i.id === id && !i.deletedAt);
+    if (index < 0) { const error = new Error('announcement not found'); error.statusCode = 404; throw error; }
+    const before = clone(state.document.items[index]);
+    if (before.status === 'claimed' && before.claim && before.claim.expiresAt >= now()) {
+      const error = new Error('announcement is currently being sent'); error.statusCode = 409; throw error;
+    }
+    if (expectedRevision != null && Number(expectedRevision) !== Number(before.revision)) {
+      const error = new Error('announcement changed; reload required'); error.statusCode = 409; throw error;
+    }
+    const item = normalizeItem(raw, before, hiddenGroupId); state.document.items[index] = item;
+    await validateFiles(item);
+    const saved = await writeDocument(state.document, { event: 'ANNOUNCEMENT_UPDATED', actor, before, after: item });
+    return { item: visible(item, hiddenGroupId), etag: saved.etag };
+  });
 }
 async function softDelete(id, expectedRevision, actor) {
-  const state = await readDocument(); const item = state.document.items.find(i => i.id === id && !i.deletedAt);
-  if (!item) { const error = new Error('announcement not found'); error.statusCode = 404; throw error; }
-  if (item.status === 'claimed' && item.claim && item.claim.expiresAt >= now()) {
-    const error = new Error('announcement is currently being sent'); error.statusCode = 409; throw error;
-  }
-  if (expectedRevision != null && Number(expectedRevision) !== Number(item.revision)) {
-    const error = new Error('announcement changed; reload required'); error.statusCode = 409; throw error;
-  }
-  const before = clone(item); item.deletedAt = now(); item.status = 'deleted'; item.updatedAt = now(); item.revision = Number(item.revision || 0) + 1;
-  const saved = await writeDocument(state.document, state.etag, { event: 'ANNOUNCEMENT_DELETED', actor, before });
-  return { etag: saved.etag };
+  return withLock('announcements-current', async () => {
+    const state = await readDocument(); const item = state.document.items.find(i => i.id === id && !i.deletedAt);
+    if (!item) { const error = new Error('announcement not found'); error.statusCode = 404; throw error; }
+    if (item.status === 'claimed' && item.claim && item.claim.expiresAt >= now()) {
+      const error = new Error('announcement is currently being sent'); error.statusCode = 409; throw error;
+    }
+    if (expectedRevision != null && Number(expectedRevision) !== Number(item.revision)) {
+      const error = new Error('announcement changed; reload required'); error.statusCode = 409; throw error;
+    }
+    const before = clone(item); item.deletedAt = now(); item.status = 'deleted'; item.updatedAt = now(); item.revision = Number(item.revision || 0) + 1;
+    const saved = await writeDocument(state.document, { event: 'ANNOUNCEMENT_DELETED', actor, before });
+    return { etag: saved.etag };
+  });
 }
 async function due(before, limit = 10) {
   const indexed = await getStore().get('dispatch/index.json');
@@ -156,31 +193,35 @@ async function due(before, limit = 10) {
     .map(i => ({ id: i.id, time: i.time, revision: i.revision, status: i.status || 'scheduled' }));
 }
 async function claim(id, botId) {
-  const state = await readDocument(); const item = state.document.items.find(i => i.id === id && !i.deletedAt);
-  if (!item || item.sent === 'true') { const error = new Error('not claimable'); error.statusCode = 409; throw error; }
-  if (item.time > shanghaiMinute() || (item.nextAttemptAt && item.nextAttemptAt > now())) { const error = new Error('not due'); error.statusCode = 409; throw error; }
-  if (item.claim && item.claim.expiresAt >= now()) { const error = new Error('already claimed'); error.statusCode = 409; throw error; }
-  const claimToken = crypto.randomUUID(); const before = clone(item);
-  item.status = 'claimed'; item.claim = { token: claimToken, by: String(botId || 'songbot'), at: now(), expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() };
-  item.lastSendAttemptAt = now(); item.sendAttempts = Number(item.sendAttempts || 0) + 1; item.revision = Number(item.revision || 0) + 1;
-  await writeDocument(state.document, state.etag, { event: 'SCHEDULE_SEND_CLAIMED', actor: { kind: 'bot', device: botId }, before, after: item });
-  const result = clone(item); result.claimToken = claimToken; delete result.claim;
-  return result;
+  return withLock('announcements-current', async () => {
+    const state = await readDocument(); const item = state.document.items.find(i => i.id === id && !i.deletedAt);
+    if (!item || item.sent === 'true') { const error = new Error('not claimable'); error.statusCode = 409; throw error; }
+    if (item.time > shanghaiMinute() || (item.nextAttemptAt && item.nextAttemptAt > now())) { const error = new Error('not due'); error.statusCode = 409; throw error; }
+    if (item.claim && item.claim.expiresAt >= now()) { const error = new Error('already claimed'); error.statusCode = 409; throw error; }
+    const claimToken = crypto.randomUUID(); const before = clone(item);
+    item.status = 'claimed'; item.claim = { token: claimToken, by: String(botId || 'songbot'), at: now(), expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() };
+    item.lastSendAttemptAt = now(); item.sendAttempts = Number(item.sendAttempts || 0) + 1; item.revision = Number(item.revision || 0) + 1;
+    await writeDocument(state.document, { event: 'SCHEDULE_SEND_CLAIMED', actor: { kind: 'bot', device: botId }, before, after: item });
+    const result = clone(item); result.claimToken = claimToken; delete result.claim;
+    return result;
+  });
 }
 async function finish(id, claimToken, result) {
-  const state = await readDocument(); const item = state.document.items.find(i => i.id === id && !i.deletedAt);
-  if (!item || !item.claim || item.claim.token !== claimToken) { const error = new Error('claim token mismatch'); error.statusCode = 409; throw error; }
-  const before = clone(item); delete item.claim; item.revision = Number(item.revision || 0) + 1; item.updatedAt = now();
-  if (result.success) {
-    item.status = 'sent'; item.sent = 'true'; item.sentAt = result.sentAt || now(); item.napcatMessageId = String(result.messageId || ''); delete item.lastSendError; delete item.nextAttemptAt;
-  } else {
-    const attempts = Number(item.sendAttempts || 1);
-    item.status = result.uncertain ? 'uncertain' : (attempts >= 5 ? 'failed_manual' : 'failed');
-    item.lastSendError = String(result.error || 'unknown send failure').slice(0, 1000);
-    if (!result.uncertain && attempts < 5) item.nextAttemptAt = new Date(Date.now() + Math.min(60, 5 * Math.pow(2, attempts - 1)) * 60 * 1000).toISOString();
-  }
-  await writeDocument(state.document, state.etag, { event: result.success ? 'SCHEDULE_SEND_SUCCESS' : (result.uncertain ? 'SCHEDULE_SEND_UNCERTAIN' : 'SCHEDULE_SEND_FAILED'), actor: { kind: 'bot' }, before, after: item });
-  return item;
+  return withLock('announcements-current', async () => {
+    const state = await readDocument(); const item = state.document.items.find(i => i.id === id && !i.deletedAt);
+    if (!item || !item.claim || item.claim.token !== claimToken) { const error = new Error('claim token mismatch'); error.statusCode = 409; throw error; }
+    const before = clone(item); delete item.claim; item.revision = Number(item.revision || 0) + 1; item.updatedAt = now();
+    if (result.success) {
+      item.status = 'sent'; item.sent = 'true'; item.sentAt = result.sentAt || now(); item.napcatMessageId = String(result.messageId || ''); delete item.lastSendError; delete item.nextAttemptAt;
+    } else {
+      const attempts = Number(item.sendAttempts || 1);
+      item.status = result.uncertain ? 'uncertain' : (attempts >= 5 ? 'failed_manual' : 'failed');
+      item.lastSendError = String(result.error || 'unknown send failure').slice(0, 1000);
+      if (!result.uncertain && attempts < 5) item.nextAttemptAt = new Date(Date.now() + Math.min(60, 5 * Math.pow(2, attempts - 1)) * 60 * 1000).toISOString();
+    }
+    await writeDocument(state.document, { event: result.success ? 'SCHEDULE_SEND_SUCCESS' : (result.uncertain ? 'SCHEDULE_SEND_UNCERTAIN' : 'SCHEDULE_SEND_FAILED'), actor: { kind: 'bot' }, before, after: item });
+    return item;
+  });
 }
 async function readDevices() {
   const object = await getStore().get(DEVICES_KEY);
@@ -190,10 +231,12 @@ async function readDevices() {
 }
 async function deviceAllowed(device) { const state = await readDevices(); return state.devices.some(d => (typeof d === 'string' ? d : d.id) === device); }
 async function addDevice(device, actor) {
-  const state = await readDevices();
-  if (!state.devices.some(d => (typeof d === 'string' ? d : d.id) === device)) state.devices.push({ id: device, createdAt: now(), source: 'password' });
-  await getStore().put(DEVICES_KEY, Buffer.from(JSON.stringify({ schema: 1, devices: state.devices, updatedAt: now() })), state.etag ? { ifMatch: state.etag } : { ifNoneMatch: true });
-  await writeAudit({ event: 'ADMIN_DEVICE_GRANTED', actor, device });
+  return withLock('admin-devices', async () => {
+    const state = await readDevices();
+    if (!state.devices.some(d => (typeof d === 'string' ? d : d.id) === device)) state.devices.push({ id: device, createdAt: now(), source: 'password' });
+    await getStore().put(DEVICES_KEY, Buffer.from(JSON.stringify({ schema: 1, devices: state.devices, updatedAt: now() })));
+    await writeAudit({ event: 'ADMIN_DEVICE_GRANTED', actor, device });
+  });
 }
 
 module.exports = { list, create, update, softDelete, due, claim, finish, readDevices, deviceAllowed, addDevice, writeAudit };

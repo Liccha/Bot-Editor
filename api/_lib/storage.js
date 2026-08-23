@@ -30,6 +30,9 @@ class LocalStore {
     if (options.ifNoneMatch && current) {
       const error = new Error('precondition failed'); error.code = 'PreconditionFailed'; throw error;
     }
+    if (options.forbidOverwrite && current) {
+      const error = new Error('object already exists'); error.code = 'FileAlreadyExists'; error.status = 409; throw error;
+    }
     await fs.mkdir(path.dirname(file), { recursive: true });
     const tmp = `${file}.${crypto.randomUUID()}.tmp`;
     await fs.writeFile(tmp, body);
@@ -66,6 +69,7 @@ class OssStore {
     const headers = {};
     if (options.ifMatch) headers['If-Match'] = quoteEtag(options.ifMatch);
     if (options.ifNoneMatch) headers['If-None-Match'] = '*';
+    if (options.forbidOverwrite) headers['x-oss-forbid-overwrite'] = 'true';
     const result = await this.client.put(key, body, { headers });
     return { etag: cleanEtag(result.res.headers.etag) };
   }
