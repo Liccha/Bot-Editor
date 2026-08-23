@@ -34,6 +34,22 @@ class LocalStore {
       const error = new Error('object already exists'); error.code = 'FileAlreadyExists'; error.status = 409; throw error;
     }
     await fs.mkdir(path.dirname(file), { recursive: true });
+    if (options.ifNoneMatch || options.forbidOverwrite) {
+      const exclusiveTmp = `${file}.${crypto.randomUUID()}.tmp`;
+      try {
+        await fs.writeFile(exclusiveTmp, body, { flag: 'wx' });
+        await fs.link(exclusiveTmp, file);
+        const saved = await this.get(key);
+        return { etag: saved.etag };
+      } catch (error) {
+        if (error.code === 'EEXIST') {
+          const conflict = new Error('object already exists'); conflict.code = 'FileAlreadyExists'; conflict.status = 409; throw conflict;
+        }
+        throw error;
+      } finally {
+        await fs.rm(exclusiveTmp, { force: true }).catch(() => {});
+      }
+    }
     const tmp = `${file}.${crypto.randomUUID()}.tmp`;
     await fs.writeFile(tmp, body);
     await fs.rename(tmp, file);

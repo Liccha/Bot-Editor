@@ -28,14 +28,6 @@
     {
       "source": "/api/visit",
       "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/visit"
-    },
-    {
-      "source": "/api/meta",
-      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/meta"
-    },
-    {
-      "source": "/api/like",
-      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/like"
     }
   ],
   "headers": [

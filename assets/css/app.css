@@ -519,6 +519,12 @@ font-size:var(--song-card-count-size);
 margin-top:2px;
 color:var(--song-card-count)
 }
+#libGrid .lib-card .heart.liked{
+color:#ef4444
+}
+#libGrid .lib-card .heart.liked .heart-n{
+color:#ef4444
+}
 @keyframes song-cover-glint-in{
 from{opacity:0;transform:rotate(-55deg)}
 55%{opacity:.96}
