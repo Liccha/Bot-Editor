@@ -15,7 +15,10 @@ function _hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(func
 function _unselectedBgCss(){var c=_hexToRgb(_dsFilters.unselectedBgColor||'#ffffff');return'rgba('+c.r+','+c.g+','+c.b+','+((_dsFilters.unselectedBgOpacity||0)/100)+')'}
 function applyFiltersCSS(){var f=_dsFilters;var s=document.getElementById('filterCapsuleStyles')||document.createElement('style');s.id='filterCapsuleStyles';var ff=f.font==='默认'?"'Microsoft YaHei',sans-serif":"'"+f.font+"','Microsoft YaHei',sans-serif";var stroke=f.strokeWidth>0?';-webkit-text-stroke:'+f.strokeWidth+'px '+f.strokeColor+';paint-order:stroke fill':' ';var css='#libFilters .tpl-capsule{font-family:'+ff+';font-size:'+f.fontSize+'px;border-radius:'+f.borderRadius+'px;background:'+_unselectedBgCss()+';width:'+f.capsuleWidth+'px;height:'+f.capsuleHeight+'px;overflow:hidden;box-sizing:border-box;border:none;font-weight:600;letter-spacing:.5px;box-shadow:inset 0 0 0 1px rgba(203,213,225,0.6),0 1px 3px rgba(0,0,0,0.04);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}';css+='#libFilters .tpl-capsule .ct{display:inline-block;transform:scaleX('+(f.fontScaleX||1)+')}';css+='#libFilters .tpl-capsule:hover{background:#fff;transform:translateY(-1px);box-shadow:inset 0 0 0 1px rgba(203,213,225,0.6),0 4px 12px rgba(0,0,0,0.1)}';['ALL','4K','5K','6K','Catch'].forEach(function(k){var c=f.capsules[k];if(!c)return;css+='#libFilters .tpl-capsule[data-flt="'+k+'"]{color:'+(c.unselectedColor||'#64748b')+'}';css+='#libFilters .tpl-capsule[data-flt="'+k+'"].active{color:'+(c.selectedColor||'#fff')+'!important;background:linear-gradient(90deg,'+c.gradLeft+','+c.gradRight+')!important;box-shadow:0 4px 14px '+c.gradLeft+'66,inset 0 1px 0 rgba(255,255,255,0.3);transform:translateY(-1px)'+stroke+'}'});css+='#libFilters .tpl-capsule.active:hover{filter:brightness(1.1)}';s.textContent=css;if(!s.parentNode)document.head.appendChild(s)}
 applyFiltersCSS();
+// 保持 v3：迁移云端时继续读取用户现有曲库缓存，再静默后台刷新新地址。
 var _cacheVersion="v3-content-addressed";
+var _LIBRARY_GITHUB_DATA="https://raw.githubusercontent.com/Liccha/song-library/master/data/songs.json";
+var _LIBRARY_PRIMARY_DATA=String(window.SONG_LIBRARY_PRIMARY_DATA_URL||"").trim();
 
 // ---- 持久化资源缓存：限制磁盘条目和内存 Blob 数，避免 iOS 长时间浏览后内存失控 ----
 var _assetCache=null,_assetCachePruned=false,_blobUrls={},_blobOrder=[],_assetPending={};
@@ -57,7 +60,7 @@ function _resolveAsset(url){
  if(_assetPending[url])return _assetPending[url];
  var task=openAssetCache().then(function(cache){
   return cache.match(url).then(function(hit){
-   return hit||fetch(url,{referrerPolicy:'no-referrer'}).then(function(r){
+   return hit||fetch(url,{referrerPolicy:'strict-origin-when-cross-origin'}).then(function(r){
     if(!r.ok&&r.type!=='opaque')throw new Error('HTTP '+r.status);
     cache.put(url,r.clone()).catch(function(){});
     return r;
@@ -73,9 +76,36 @@ function _resolveAsset(url){
  task.then(function(){delete _assetPending[url]},function(){delete _assetPending[url]});
  return task;
 }
-function loadAsset(url,onDone){
+function loadAsset(url,onDone,fallbackUrl){
  if(!url){onDone('');return}
- _resolveAsset(url).then(onDone,function(){onDone(url)});
+ _resolveAsset(url).then(onDone,function(){
+  if(fallbackUrl&&fallbackUrl!==url){
+   _resolveAsset(fallbackUrl).then(onDone,function(){onDone(fallbackUrl)});
+  }else onDone(url);
+ });
+}
+
+async function _fetchLibraryJson(url,timeoutMs){
+ var controller=typeof AbortController==='function'?new AbortController():null;
+ var timer=controller?setTimeout(function(){controller.abort()},timeoutMs||6000):0;
+ try{
+  var options={cache:'no-cache',referrerPolicy:'strict-origin-when-cross-origin'};
+  if(controller)options.signal=controller.signal;
+  var response=await fetch(url,options);
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  var data=await response.json();
+  if(!Array.isArray(data)||!data.length)throw new Error('歌曲数据格式无效');
+  return data;
+ }finally{if(timer)clearTimeout(timer)}
+}
+
+async function _fetchCurrentLibrary(){
+ if(_LIBRARY_PRIMARY_DATA){
+  try{return await _fetchLibraryJson(_LIBRARY_PRIMARY_DATA,6000)}catch(e){
+   if(window.console&&console.warn)console.warn('[曲库] 云端不可用，切换 GitHub 备份',e&&e.message||e);
+  }
+ }
+ return _fetchLibraryJson(_LIBRARY_GITHUB_DATA,12000);
 }
 
 async function loadLibrary(){
@@ -84,15 +114,14 @@ async function loadLibrary(){
  try{
   var c2=localStorage.getItem("songlib_data");
   if(c2){try{var d=JSON.parse(c2);if(d.version===_cacheVersion&&d.data&&d.data.length){LIB_DATA=d.data;fromCache=true;document.getElementById("libStats").textContent=LIB_DATA.length+" songs (cached)";renderLibrary()}}catch(e){}}
-   var r=await fetch("https://raw.githubusercontent.com/Liccha/song-library/master/data/songs.json",{cache:'no-cache'});
-   if(r.ok){
-    var json=await r.json();json.sort(function(a,b){return b.id-a.id});
-    if(!Array.isArray(json))throw new Error("歌曲数据格式无效");
+   var json=await _fetchCurrentLibrary();
+   if(json){
+    json.sort(function(a,b){return b.id-a.id});
     LIB_DATA=json;
     try{localStorage.setItem("songlib_data",JSON.stringify({version:_cacheVersion,data:json,time:Date.now()}))}catch(e){}
     document.getElementById("libStats").textContent=json.length+" songs";
     renderLibrary(document.getElementById("libSearch").value);
-   }else if(!fromCache)throw new Error("HTTP "+r.status);
+   }else if(!fromCache)throw new Error("歌曲数据为空");
  }catch(e){if(!fromCache)document.getElementById("libStats").textContent="Failed: "+e.message}
 }
 
@@ -186,7 +215,13 @@ function _loadCardCover(img,generation){
   img.onload=null;img.onerror=null;
  };
  img.onerror=function(){
-  // 保留原地址，网络恢复或下次重新渲染时仍可由浏览器正常重试。
+  var fallback=img.dataset.coverFallback||'';
+  if(fallback&&img.dataset.coverTriedFallback!=='1'){
+   img.dataset.coverTriedFallback='1';
+   img.src=fallback;
+   return;
+  }
+  // 两个来源都失败时保留地址，网络恢复或重新渲染后仍可正常重试。
   delete img.dataset.coverLoading;
   img.onerror=null;
  };
@@ -317,7 +352,7 @@ function renderLibrary(filter,options){
   if(q&&songMeta.search.indexOf(q)<0)continue;
   count++;
   if(rendered>=renderLimit)continue;
-  var cov=s.cover||"";
+  var cov=s.cover||"",covFallback=s.coverFallback||"";
   var tags="";
   if(_libFilter==="ALL"){
    var cfg=_DS_CFG.tags||{};
@@ -330,7 +365,7 @@ function renderLibrary(filter,options){
   }
   var enterClass=revealCards&&rendered<9?" lib-card-enter":"";
   var enterStyle=revealCards&&rendered<9?' style="--lib-enter-order:'+rendered+'"':"";
-  html+="<div class=\"lib-card"+enterClass+"\" data-idx="+i+enterStyle+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" data-cover=\""+escHtml(cov)+"\"":"")+" width=\"80\" height=\"80\" decoding=\"async\" referrerpolicy=\"no-referrer\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
+  html+="<div class=\"lib-card"+enterClass+"\" data-idx="+i+enterStyle+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" data-cover=\""+escHtml(cov)+"\"":"")+(covFallback?" data-cover-fallback=\""+escHtml(covFallback)+"\"":"")+" width=\"80\" height=\"80\" decoding=\"async\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
   rendered++;
  }
  var grid=document.getElementById("libGrid");grid.onclick=function(e){var h=e.target.closest(".heart");if(h){e.stopPropagation();var hid=parseInt(h.dataset.hid);if(!isNaN(hid))heartToggle(hid);return}var card=e.target.closest(".lib-card");if(card){var idx=parseInt(card.dataset.idx);if(!isNaN(idx)){playSong(idx,card);showSongDetail(idx)}}};
@@ -469,11 +504,21 @@ function playSong(idx,cardEl){
 	 var token=++_pendingPlay;
 	 var src=_blobUrls[s.preview]||s.preview;
 	 var a=document.createElement("audio");a.dataset.songbotPreview="1";a.src=src;a.loop=true;a.volume=0.5;a.preload="auto";a.style.display="none";
+	 var fallbackPreview=s.previewFallback||"";
+	 if(fallbackPreview&&fallbackPreview!==s.preview){
+	  a.onerror=function(){
+	   if(a.dataset.fallbackTried==='1'||token!==_pendingPlay||_curAudio!==a)return;
+	   a.dataset.fallbackTried='1';a.dataset.fallbackSwitching='1';a.onerror=null;
+	   a.src=_blobUrls[fallbackPreview]||fallbackPreview;a.load();
+	   var retry=a.play();
+	   if(retry&&retry.then)retry.then(function(){delete a.dataset.fallbackSwitching}).catch(function(){if(_curAudio===a){_curAudio=null;_curIdx=-1}_disposePreviewAudio(a);_clearPlayingCardState()});
+	  };
+	 }
 	 document.body.appendChild(a);
 	 _curAudio=a;_curIdx=idx;
 	 var playResult=a.play();
-	 if(playResult&&playResult.then){playResult.then(function(){if(token!==_pendingPlay||_curAudio!==a)_disposePreviewAudio(a)}).catch(function(){if(_curAudio===a){_curAudio=null;_curIdx=-1} _disposePreviewAudio(a);_clearPlayingCardState()})}
-	 if(!_blobUrls[s.preview])loadAsset(s.preview,function(){});
+	 if(playResult&&playResult.then){playResult.then(function(){if(token!==_pendingPlay||_curAudio!==a)_disposePreviewAudio(a)}).catch(function(){if(a.dataset.fallbackSwitching==='1')return;if(_curAudio===a){_curAudio=null;_curIdx=-1} _disposePreviewAudio(a);_clearPlayingCardState()})}
+	 if(!_blobUrls[s.preview])loadAsset(s.preview,function(){},fallbackPreview);
 	}
 	var _curAudio=null,_curIdx=-1,_pendingPlay=0;
 	function _disposePreviewAudio(a){
@@ -531,6 +576,7 @@ function _applyPopupBg(covUrl){
 function showSongDetail(idx){
  var s=LIB_DATA[idx];if(!s)return;
  var covSrc=_blobUrls[s.cover]||s.cover||"";
+ var covFallback=s.coverFallback||"";
  var charterStr=(s.charters||[]).join("、")||"—";
 
  var chartsHtml="";
@@ -562,7 +608,7 @@ function showSongDetail(idx){
  dd.innerHTML=
   _pshHtml
   +'<div class="ld-header">'
-  +'<img class="ld-cover" src="'+escHtml(covSrc)+'" onerror="this.removeAttribute(\'src\')">'
+  +'<img class="ld-cover" src="'+escHtml(covSrc)+'"'+(covFallback?' data-cover-fallback="'+escHtml(covFallback)+'"':'')+'>'
   +'<div class="ld-name">'+escHtml(s.name)+'</div>'
   +'<div class="ld-artist">'+escHtml(s.artist||"")+'</div>'
   +'<div class="ld-charter"><span class="ld-charter-label">谱面：</span><span class="ld-charter-name">'+escHtml(charterStr)+'</span></div>'
@@ -572,6 +618,7 @@ function showSongDetail(idx){
   +'<button class="ld-close" onclick="stopCurrentSong();document.getElementById(\'libDetail\').classList.remove(\'show\')">关闭</button>';
 
  var detailCover=dd.querySelector(".ld-cover"),detailHeader=dd.querySelector(".ld-header");
+ if(detailCover){detailCover.onerror=function(){var fallback=this.dataset.coverFallback||'';if(fallback&&this.dataset.coverTriedFallback!=='1'){this.dataset.coverTriedFallback='1';this.src=fallback}else this.removeAttribute('src')}}
  if(detailCover&&detailHeader){
   var detailCoverStyle=getComputedStyle(detailCover);
   detailHeader.style.setProperty("--detail-play-left",(detailCover.offsetLeft-4)+"px");
@@ -661,7 +708,7 @@ function showSongDetail(idx){
  },200);
  // 封面取色（useCoverBg 默认开启，dsConfig.popup.useCoverBg===false 时跳过）
  if(!_DS_CFG.popup||_DS_CFG.popup.useCoverBg!==false){
-  if(s.cover){loadAsset(s.cover,function(bu){_applyPopupBg(bu||s.cover)})}
+  if(s.cover){loadAsset(s.cover,function(bu){_applyPopupBg(bu||s.cover)},s.coverFallback)}
  }
 }
 
