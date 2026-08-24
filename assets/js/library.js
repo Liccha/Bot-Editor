@@ -363,8 +363,8 @@ function renderLibrary(filter,options){
     {v:hasCatch,label:"Catch",bg:cfg.bgCatch||"#fce7f3",cl:cfg.colorCatch||"#9d174d"}
    ].forEach(function(tp){if(tp.v)tags+="<span style=\"background:"+tp.bg+";color:"+tp.cl+"\">"+tp.label+"</span>"});
   }
-  var enterClass=revealCards&&rendered<9?" lib-card-enter":"";
-  var enterStyle=revealCards&&rendered<9?' style="--lib-enter-order:'+rendered+'"':"";
+  var enterClass=revealCards&&rendered<20?" lib-card-enter":"";
+  var enterStyle=revealCards&&rendered<20?' style="--lib-enter-order:'+rendered+'"':"";
   html+="<div class=\"lib-card"+enterClass+"\" data-idx="+i+enterStyle+">"+'<div class="shape-layer">'+(_DS_CFG.shapes||[]).map(function(sh,j){return "<div class=\"sh"+j+"\"></div>"}).join("")+'</div>'+"<img class=\"cv\""+(cov?" data-cover=\""+escHtml(cov)+"\"":"")+(covFallback?" data-cover-fallback=\""+escHtml(covFallback)+"\"":"")+" width=\"80\" height=\"80\" decoding=\"async\">"+'<div class="card-clip">'+"<div class=\"na\">"+(_DS_CFG.name&&_DS_CFG.name.prefix||"")+escHtml(s.name)+(_DS_CFG.name&&_DS_CFG.name.suffix||"")+"</div>"+"<div class=\"ar\">"+(_DS_CFG.artist&&_DS_CFG.artist.prefix||"")+escHtml(s.artist||"")+(_DS_CFG.artist&&_DS_CFG.artist.suffix||"")+"</div>"+"<div class=\"bp\">"+(_DS_CFG.bpm&&_DS_CFG.bpm.prefix||"BPM:")+(s.bpm||"?")+(_DS_CFG.bpm&&_DS_CFG.bpm.suffix||"")+"</div>"+"<div class=\"du\">"+(_DS_CFG.duration&&_DS_CFG.duration.prefix||"")+s.duration+(_DS_CFG.duration&&_DS_CFG.duration.suffix||"")+"</div>"+"<div class=\"ch\">"+(_DS_CFG.charters&&_DS_CFG.charters.prefix||"")+escHtml((s.charters||[]).join(", "))+(_DS_CFG.charters&&_DS_CFG.charters.suffix||"")+"</div>"+"<div class=\"ta\">"+tags+"</div></div>"+'<div class="heart'+(_LIKED.has(s.id)?' liked':'')+'" data-hid="'+s.id+'">'+_HEART_SVG+'<span class="heart-n">'+(_LIKES[s.id]||0)+'</span></div>'+"</div>";
   rendered++;
  }
@@ -378,7 +378,7 @@ function renderLibrary(filter,options){
    card.style.removeProperty("--lib-enter-order");
   };
   card.addEventListener("animationend",cleanup,{once:true});
-  setTimeout(cleanup,700);
+  setTimeout(cleanup,2200);
  });
  if(_libraryMoreObserver){_libraryMoreObserver.disconnect();_libraryMoreObserver=null}
  if(count>rendered){
@@ -594,7 +594,7 @@ function showSongDetail(idx){
   keys.forEach(function(k){
    var d=c[k];
    var label,cls;
-   if(isCatch){label=d.name||k;cls="ld-catch"}
+   if(isCatch){label=d.name||k;cls=_diffCls(k)}
    else{label=_diffLabel(k)+' Lv.'+(d.level||0)+'  键数：'+(d.combo||0);cls=_diffCls(k)}
    chartsHtml+='<span class="ld-diff '+cls+'">'+escHtml(label)+'</span>';
   });

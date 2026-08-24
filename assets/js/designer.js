@@ -416,7 +416,7 @@ function cardCSS(){
 			var btn=this;btn.disabled=true;btn.textContent="保存中...";
 			var css="";
 			css+=".lib-card{position:relative;background:"+_ds.card.bg+";border-radius:"+_ds.card.brTL+"px "+_ds.card.brTR+"px "+_ds.card.brBR+"px "+_ds.card.brBL+"px;border:1px solid #e2e8f0;padding:0;display:block;cursor:pointer;transition:all .15s;min-height:"+_ds.card.h+"px}\n";
-			css+=".lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}\n";
+			css+=".lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08)}\n";
 			css+=".lib-grid{gap:"+_ds.card.gap+"px}";css+="@media(max-width:768px){.lib-grid{gap:"+(_ds.card.mobileGap||_ds.card.gap)+"px}}";
 			css+=".lib-card .cv{position:absolute;left:"+_ds.cover.x+"px;top:"+_ds.cover.y+"px;width:"+_ds.cover.w+"px;height:"+_ds.cover.h+"px;object-fit:cover;border-radius:"+_ds.cover.radius+"%;border:"+_ds.cover.ringW+"px solid "+_ds.cover.ringColor+";box-shadow:"+_ds.cover.shadow+";flex-shrink:0;background:#fff"+(typeof _ds.cover.visible==="boolean"&&!_ds.cover.visible?";display:none":"")+"}\n";
 			["name","artist","bpm","duration","charters","tags"].forEach(function(t){

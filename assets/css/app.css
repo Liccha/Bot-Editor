@@ -109,7 +109,7 @@ body{font-family:'Microsoft YaHei',sans-serif;background:#f5f6fa url('../../bg.p
 .lib-search:focus{border-color:#3b82f6}
 .lib-grid{display:flex;flex-direction:column;gap:8px}
 .lib-card{position:relative;background:rgba(255,255,255,0.85);border-radius:60px 12px 60px 60px;border:1px solid #e2e8f0;padding:0;display:block;cursor:pointer;transition:all .15s;min-height:110px}
-.lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}
+.lib-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08)}
 .lib-grid{gap:20px}@media(max-width:768px){.lib-grid{gap:80px}}.lib-card .cv{position:absolute;left:-19px;top:-6px;width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid #317ad8;box-shadow:0 0 0 2px rgba(59,130,246,.15);flex-shrink:0;background:#fff}
 .lib-card .na{position:absolute;left:118px;top:6px;font-family:'演示斜黑体';font-size:21px;color:#1e293b;line-height:1.4;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:clip}
 .lib-card .ar{position:absolute;left:118px;top:41px;font-family:'演示斜黑体';font-size:13px;color:#27292b;line-height:1.4;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:clip}
@@ -300,9 +300,6 @@ from{opacity:.04;translate:-38px 0}
 to{opacity:1;translate:0 0}
 }
 }
-@media(hover:hover) and (pointer:fine){
-.lib-card:hover{transform:translate3d(0,-1px,0)}
-}
 @media(prefers-reduced-motion:reduce){
 #libFilters .tpl-capsule{transition-duration:80ms}
 html.is-ios{--lib-card-stagger:var(--lib-card-stagger-reduced)}
@@ -365,8 +362,8 @@ to{opacity:1}
 --song-card-ring-top:-9px;
 --song-card-ring-glint-width:3.6px;
 --song-card-gap:21.6px;
---song-card-gap-mobile:89.535px;
---song-card-mobile-margin-bottom:calc(.155869 * (100vw - 40px) - 113.178px);
+--song-card-gap-mobile:80.5815px;
+--song-card-mobile-margin-bottom:calc(.1402821 * (100vw - 40px) - 101.8602px);
 --song-card-name-size:18.9px;
 --song-card-artist-size:11.7px;
 --song-card-meta-size:12.6px;
