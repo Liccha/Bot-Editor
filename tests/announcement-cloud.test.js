@@ -112,3 +112,53 @@ test('future tasks cannot be claimed and uncertain sends never auto-retry', asyn
   const pending = await call('GET', 'bot-due', { headers: botHeaders, query: { before: '2099-01-02 00:00' } });
   assert.ok(!pending.body.items.some(item => item.id === due.body.id));
 });
+
+test('teacharm website posts use the cloud store with revisions and safe names', async () => {
+  const desktopHeaders = { authorization: 'Desktop desktop-token-for-tests-only', 'x-admin-device': 'website-editor-test' };
+  const name = '云端文章.md';
+  const created = await call('POST', 'website-save', {
+    headers: desktopHeaders,
+    body: { name, content: '---\ntitle: 云端文章\n---\n第一版\n' }
+  });
+  assert.equal(created.status, 200);
+  assert.equal(created.body.revision, 1);
+
+  const listed = await call('GET', 'website-list', { headers: desktopHeaders });
+  assert.equal(listed.status, 200);
+  const summary = listed.body.find(item => item.name === name);
+  assert.ok(summary);
+  assert.equal(Object.hasOwn(summary, 'content'), false);
+
+  const read = await call('GET', 'website-read', { headers: desktopHeaders, query: { name } });
+  assert.equal(read.status, 200);
+  assert.equal(read.body.content, created.body.content);
+
+  const stale = await call('POST', 'website-save', {
+    headers: desktopHeaders,
+    body: { name, content: '错误覆盖', revision: 0 }
+  });
+  assert.equal(stale.status, 409);
+
+  const updated = await call('POST', 'website-save', {
+    headers: desktopHeaders,
+    body: { name, content: '第二版', revision: created.body.revision }
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.revision, 2);
+  assert.equal((await call('POST', 'website-save', {
+    headers: desktopHeaders,
+    body: { name: '../越界.md', content: 'x' }
+  })).status, 400);
+
+  const removed = await call('DELETE', 'website-delete', {
+    headers: desktopHeaders,
+    query: { name, revision: updated.body.revision }
+  });
+  assert.equal(removed.status, 200);
+  assert.equal((await call('GET', 'website-read', { headers: desktopHeaders, query: { name } })).status, 404);
+});
+
+test('website post APIs reject unauthenticated callers', async () => {
+  assert.equal((await call('GET', 'website-list')).status, 401);
+  assert.equal((await call('POST', 'website-save', { body: { name: '未授权.md', content: 'x' } })).status, 401);
+});

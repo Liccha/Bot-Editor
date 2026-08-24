@@ -3,7 +3,10 @@
 (function(){
 var BLOG_API=API_BASE+'/api/blog';
 var _currentFile=null;
+var _currentRevision=null;
 var _openGeneration=0,_listGeneration=0;
+function useCloudWebsite(){return !!window.ANNOUNCEMENT_CLOUD_REQUIRED}
+function websiteUrl(action,name){if(!useCloudWebsite())return BLOG_API+'/'+action+(name?'?'+encodeURIComponent(name):'');return API_BASE+'/api/announcement-cloud?action=website-'+action+(name?'&name='+encodeURIComponent(name):'')}
 
 function weToast(msg){
 	var t=document.getElementById('weToast');
@@ -21,6 +24,7 @@ window.closeWebsiteEditor=function(){
 	document.getElementById('weOverlay').classList.remove('show');
 	_openGeneration++;
 	_currentFile=null;
+	_currentRevision=null;
 	document.getElementById('weEditor').value='';
 	document.getElementById('weEditor').style.display='none';
 	document.getElementById('weEditorToolbar').style.display='none';
@@ -32,7 +36,7 @@ window.syncPosts=function(){
 	var generation=++_listGeneration;
 	var list=document.getElementById('weFileList');
 	list.innerHTML='<div class="we-empty-state">加载中...</div>';
-	fetch(BLOG_API+'/list',{headers:adminHeaders()})
+	fetch(websiteUrl('list'),{headers:adminHeaders(),cache:'no-store'})
 		.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
 		.then(function(files){
 			if(generation!==_listGeneration)return;
@@ -54,6 +58,7 @@ window.syncPosts=function(){
 function openMdFile(filename){
 	var generation=++_openGeneration;
 	_currentFile=filename;
+	_currentRevision=null;
 	document.getElementById('weFileName').textContent=filename;
 	document.getElementById('weEditorEmpty').style.display='none';
 	document.getElementById('weEditor').style.display='';
@@ -64,10 +69,11 @@ function openMdFile(filename){
 	var items=document.querySelectorAll('.we-file-item');
 	items.forEach(function(el){if(el.textContent===filename)el.classList.add('active')});
 
-	fetch(BLOG_API+'/read?'+encodeURIComponent(filename),{headers:adminHeaders()})
+	fetch(websiteUrl('read',filename),{headers:adminHeaders(),cache:'no-store'})
 		.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
 		.then(function(d){
 			if(generation!==_openGeneration||_currentFile!==filename)return;
+			_currentRevision=d.revision==null?null:Number(d.revision);
 			document.getElementById('weEditor').value=d.content||'';
 			document.getElementById('weEditor').disabled=false;
 			document.getElementById('weEditor').focus();
@@ -85,14 +91,14 @@ window.saveCurrentMd=function(){
 	var content=document.getElementById('weEditor').value;
 	var btn=document.getElementById('weSaveBtn');
 	btn.disabled=true;btn.textContent='保存中...';
-	fetch(BLOG_API+'/save',{
+	fetch(websiteUrl('save'),{
 		method:'POST',
 		headers:adminHeaders({'Content-Type':'application/json'}),
-		body:JSON.stringify({name:savingFile,content:content})
+		body:JSON.stringify({name:savingFile,content:content,revision:_currentRevision})
 	})
-	.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
-	.then(function(){weToast('已保存: '+savingFile);btn.disabled=false;btn.textContent='保存到服务器'})
-	.catch(function(e){weToast('保存失败: '+e.message);btn.disabled=false;btn.textContent='保存到服务器'});
+	.then(function(r){if(!r.ok){var e=new Error(r.status===409?'文章已被其他人修改，请重新打开':'HTTP '+r.status);throw e}return r.json()})
+	.then(function(saved){if(saved&&saved.revision!=null)_currentRevision=Number(saved.revision);weToast('已保存: '+savingFile);btn.disabled=false;btn.textContent='保存文章'})
+	.catch(function(e){weToast('保存失败: '+e.message);btn.disabled=false;btn.textContent='保存文章'});
 };
 
 window.downloadCurrentMd=function(){
@@ -113,16 +119,16 @@ window.uploadNewMd=function(){
 window.handleMdUpload=function(input){
 	var file=input.files[0];if(!file)return;
 	if(!file.name.toLowerCase().endsWith('.md')){weToast('只允许上传 .md 文件');input.value='';return}
-	if(file.size>5*1024*1024){weToast('文件不能超过 5MB');input.value='';return}
+	if(file.size>4*1024*1024){weToast('文件不能超过 4MB');input.value='';return}
 	var reader=new FileReader();
 	reader.onload=function(){
 		var content=reader.result;
-		fetch(BLOG_API+'/save',{
+		fetch(websiteUrl('save'),{
 			method:'POST',
 			headers:adminHeaders({'Content-Type':'application/json'}),
 			body:JSON.stringify({name:file.name,content:content})
 		})
-		.then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+		.then(function(r){if(!r.ok)throw new Error(r.status===409?'同名文章已经存在，请先打开后编辑':'HTTP '+r.status);return r.json()})
 		.then(function(){weToast('已上传: '+file.name);syncPosts()})
 		.catch(function(e){weToast('上传失败: '+e.message)});
 	};

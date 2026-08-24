@@ -239,4 +239,4 @@ async function addDevice(device, actor) {
   });
 }
 
-module.exports = { list, create, update, softDelete, due, claim, finish, readDevices, deviceAllowed, addDevice, writeAudit };
+module.exports = { list, create, update, softDelete, due, claim, finish, readDevices, deviceAllowed, addDevice, writeAudit, withLock };

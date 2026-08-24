@@ -18,10 +18,6 @@
       "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/excel/:path*"
     },
     {
-      "source": "/api/blog/:path*",
-      "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/blog/:path*"
-    },
-    {
       "source": "/api/admin/:path*",
       "destination": "https://win-mohsfa7n4b0.tailae715d.ts.net/api/admin/:path*"
     },

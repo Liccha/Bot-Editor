@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { config } = require('./_lib/config');
 const { getStore } = require('./_lib/storage');
 const repo = require('./_lib/repository');
+const websitePosts = require('./_lib/website-posts');
 const security = require('./_lib/security');
 const grantWindows = new Map();
 
@@ -97,6 +98,14 @@ module.exports = async function handler(req, res) {
         return json(res, 200, { ok: true });
       }
     }
+    if (action.startsWith('website-')) {
+      const session = await admin(req, desktop); if (!session) return json(res, 401, { error: 'admin authorization required' });
+      const auditActor = actor(req, session.sub || device(req), session.desktop ? 'mczmaker' : 'admin');
+      if (action === 'website-list' && req.method === 'GET') return json(res, 200, await websitePosts.list());
+      if (action === 'website-read' && req.method === 'GET') return json(res, 200, await websitePosts.read(String(query(req, 'name') || '')));
+      if (action === 'website-save' && (req.method === 'POST' || req.method === 'PUT')) return json(res, 200, await websitePosts.save(body(req), auditActor));
+      if (action === 'website-delete' && req.method === 'DELETE') return json(res, 200, await websitePosts.softDelete(String(query(req, 'name') || ''), query(req, 'revision'), auditActor));
+    }
     if (action === 'upload-ticket' && req.method === 'POST') {
       const session = await admin(req, desktop); if (!session) return json(res, 401, { error: 'admin authorization required' });
       const input = body(req); const type = input.type === 'image' ? 'image' : 'attach';
@@ -151,7 +160,8 @@ module.exports = async function handler(req, res) {
       status
     });
     const safeStatus = status >= 400 && status < 600 ? status : 500;
-    const publicError = safeStatus === 409 ? 'conflict'
+    const publicError = safeStatus === 413 ? 'content too large'
+      : safeStatus === 409 ? 'conflict'
       : safeStatus === 404 ? 'not found'
         : safeStatus === 400 ? 'invalid request'
           : safeStatus === 401 || safeStatus === 403 ? 'not authorized'
