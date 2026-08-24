@@ -19,13 +19,47 @@ const api = String(process.env.ANNOUNCEMENT_CLOUD_API || properties.api || '').r
 const desktopToken = String(process.env.ANNOUNCEMENT_DESKTOP_TOKEN || properties.desktopToken || '');
 if (!api || !desktopToken) throw new Error('Cloud API or desktop token is missing');
 const headers = { Authorization: `Desktop ${desktopToken}`, 'X-Admin-Device': 'website-migration', Accept: 'application/json' };
+const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 async function request(action, options = {}) {
-  const response = await fetch(`${api}?action=${encodeURIComponent(action)}${options.name ? `&name=${encodeURIComponent(options.name)}` : ''}`, {
-    method: options.method || 'GET', headers: { ...headers, ...(options.body ? { 'Content-Type': 'application/json; charset=utf-8' } : {}) },
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-  if (!response.ok) throw new Error(`${action} failed with HTTP ${response.status}`);
-  return response.json();
+  const method = options.method || 'GET'; const attempts = method === 'GET' ? 5 : 1; let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetch(`${api}?action=${encodeURIComponent(action)}${options.name ? `&name=${encodeURIComponent(options.name)}` : ''}`, {
+        method, signal: AbortSignal.timeout(45_000),
+        headers: { ...headers, ...(options.body ? { 'Content-Type': 'application/json; charset=utf-8' } : {}) },
+        body: options.body ? JSON.stringify(options.body) : undefined
+      });
+      if (!response.ok) { const error = new Error(`${action} failed with HTTP ${response.status}`); error.status = response.status; throw error; }
+      return response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await wait(Math.min(5000, attempt * 1000));
+    }
+  }
+  throw lastError;
+}
+async function saveVerified(post, initial) {
+  let previous = initial; let lastError;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    if (previous?.sha256 === post.sha256) return;
+    try {
+      const saved = await request('website-save', { method: 'POST', body: {
+        name: post.name, content: post.content, ...(previous ? { revision: previous.revision } : {})
+      } });
+      if (saved.sha256 !== post.sha256) throw new Error(`Cloud returned a different hash for ${post.name}`);
+      return;
+    } catch (error) {
+      lastError = error;
+      try {
+        previous = await request('website-read', { name: post.name });
+        if (previous.sha256 === post.sha256) return;
+      } catch (readError) {
+        if (readError.status === 404) previous = null; else lastError = readError;
+      }
+      if (attempt < 5) await wait(Math.min(5000, attempt * 1000));
+    }
+  }
+  throw lastError;
 }
 const files = fs.readdirSync(source, { withFileTypes: true }).filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.md'));
 const posts = files.map(entry => {
@@ -40,9 +74,8 @@ const existingByName = new Map(existing.map(item => [item.name, item]));
 for (const post of posts) {
   const previous = existingByName.get(post.name);
   if (previous?.sha256 === post.sha256) continue;
-  await request('website-save', { method: 'POST', name: post.name, body: {
-    name: post.name, content: post.content, ...(previous ? { revision: previous.revision } : {})
-  } });
+  await saveVerified(post, previous);
+  console.log(`Migrated ${post.name}`);
 }
 const remote = await request('website-list');
 const remoteByName = new Map(remote.map(item => [item.name, item]));
