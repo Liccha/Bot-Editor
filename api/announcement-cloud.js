@@ -4,6 +4,7 @@ const { getStore } = require('./_lib/storage');
 const repo = require('./_lib/repository');
 const websitePosts = require('./_lib/website-posts');
 const security = require('./_lib/security');
+const emergency = require('./_lib/emergency-lock');
 const grantWindows = new Map();
 
 function json(res, status, value, headers = {}) {
@@ -55,7 +56,10 @@ module.exports = async function handler(req, res) {
   const action = String(query(req, 'action') || 'health');
   try {
     const cfg = config();
-    if (action === 'health') return json(res, 200, { ok: true });
+    if (action === 'health') {
+      const policy = await emergency.state();
+      return json(res, 200, { ok: true, writeLocked: policy.locked });
+    }
 
     const desktop = security.desktopAuthorized(req);
     if (!action.startsWith('bot-') && !desktop && !browserAllowed(req, cfg)) return json(res, 403, { error: 'origin not allowed' });
@@ -68,6 +72,7 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'desktop-ip-grant' && req.method === 'POST') {
       if (!desktop) return json(res, 401, { error: 'desktop authorization required' });
+      await emergency.assertWriteAllowed();
       const fingerprint = security.ipFingerprint(req);
       if (!fingerprint) return json(res, 400, { error: 'client address unavailable' });
       const dev = device(req) || 'bot-workstation';
@@ -88,6 +93,7 @@ module.exports = async function handler(req, res) {
         // not an authentication attack: do not block, delay, or mutate device state.
         return json(res, 200, { admin: false });
       }
+      await emergency.assertWriteAllowed();
       await repo.addDevice(dev, actor(req, dev));
       return json(res, 200, { admin: true }, { 'Set-Cookie': sessionCookie(security.signSession(dev)) });
     }
@@ -101,14 +107,17 @@ module.exports = async function handler(req, res) {
       const session = await admin(req, desktop); if (!session) return json(res, 401, { error: 'admin authorization required' });
       const dev = session.sub || device(req); const auditActor = actor(req, dev, session.desktop ? 'mczmaker' : 'admin'); const id = String(query(req, 'id') || '');
       if (req.method === 'POST') {
+        await emergency.assertWriteAllowed();
         const result = await repo.create(body(req), auditActor, cfg.hiddenGroupId);
         return json(res, 201, result.item, { ETag: `"${result.etag}"` });
       }
       if (req.method === 'PATCH' || req.method === 'PUT') {
+        await emergency.assertWriteAllowed();
         const input = body(req); const result = await repo.update(id, input, input.revision, auditActor, cfg.hiddenGroupId);
         return json(res, 200, result.item, { ETag: `"${result.etag}"` });
       }
       if (req.method === 'DELETE') {
+        await emergency.assertWriteAllowed();
         await repo.softDelete(id, query(req, 'revision'), auditActor);
         return json(res, 200, { ok: true });
       }
@@ -118,11 +127,18 @@ module.exports = async function handler(req, res) {
       const auditActor = actor(req, session.sub || device(req), session.desktop ? 'mczmaker' : 'admin');
       if (action === 'website-list' && req.method === 'GET') return json(res, 200, await websitePosts.list());
       if (action === 'website-read' && req.method === 'GET') return json(res, 200, await websitePosts.read(String(query(req, 'name') || '')));
-      if (action === 'website-save' && (req.method === 'POST' || req.method === 'PUT')) return json(res, 200, await websitePosts.save(body(req), auditActor));
-      if (action === 'website-delete' && req.method === 'DELETE') return json(res, 200, await websitePosts.softDelete(String(query(req, 'name') || ''), query(req, 'revision'), auditActor));
+      if (action === 'website-save' && (req.method === 'POST' || req.method === 'PUT')) {
+        await emergency.assertWriteAllowed();
+        return json(res, 200, await websitePosts.save(body(req), auditActor));
+      }
+      if (action === 'website-delete' && req.method === 'DELETE') {
+        await emergency.assertWriteAllowed();
+        return json(res, 200, await websitePosts.softDelete(String(query(req, 'name') || ''), query(req, 'revision'), auditActor));
+      }
     }
     if (action === 'upload-ticket' && req.method === 'POST') {
       const session = await admin(req, desktop); if (!session) return json(res, 401, { error: 'admin authorization required' });
+      await emergency.assertWriteAllowed();
       const input = body(req); const type = input.type === 'image' ? 'image' : 'attach';
       const size = Number(input.size || 0); const limit = type === 'image' ? cfg.maxImageBytes : cfg.maxAttachmentBytes;
       if (!size || size > limit) return json(res, 400, { error: `file size must be between 1 and ${limit}` });
@@ -135,6 +151,7 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'delete-file' && req.method === 'DELETE') {
       const session = await admin(req, desktop); if (!session) return json(res, 401, { error: 'admin authorization required' });
+      await emergency.assertWriteAllowed();
       const key = String(query(req, 'key') || '');
       if (!/^uploads\/ann_[a-zA-Z0-9_-]+\/(image|attach)\//.test(key)) return json(res, 400, { error: 'invalid object key' });
       const trash = `trash/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-${key.split('/').pop()}`;
@@ -146,6 +163,7 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { ok: true });
     }
     if (action === 'local-upload' && cfg.local && req.method === 'PUT') {
+      await emergency.assertWriteAllowed();
       const key = String(query(req, 'key') || ''); await getStore().put(key, Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || ''));
       return json(res, 200, { ok: true });
     }
@@ -155,6 +173,7 @@ module.exports = async function handler(req, res) {
       const input = req.method === 'GET' ? {} : body(req); const id = String(input.id || query(req, 'id') || '');
       if (action === 'bot-due' && req.method === 'GET') return json(res, 200, { items: await repo.due(String(query(req, 'before') || '').slice(0, 16), 10) });
       if (action === 'bot-claim' && req.method === 'POST') {
+        await emergency.assertWriteAllowed();
         const item = await repo.claim(id, input.botId || 'songbot');
         if (item.image) item.imageUrl = await getStore().signedGetUrl(item.image);
         if (item.attach) {
@@ -163,8 +182,14 @@ module.exports = async function handler(req, res) {
         }
         return json(res, 200, item);
       }
-      if (action === 'bot-complete' && req.method === 'POST') return json(res, 200, await repo.finish(id, input.claimToken, { success: true, messageId: input.messageId, sentAt: input.sentAt }));
-      if (action === 'bot-fail' && req.method === 'POST') return json(res, 200, await repo.finish(id, input.claimToken, { success: false, error: input.error, uncertain: Boolean(input.uncertain) }));
+      if (action === 'bot-complete' && req.method === 'POST') {
+        await emergency.assertWriteAllowed();
+        return json(res, 200, await repo.finish(id, input.claimToken, { success: true, messageId: input.messageId, sentAt: input.sentAt }));
+      }
+      if (action === 'bot-fail' && req.method === 'POST') {
+        await emergency.assertWriteAllowed();
+        return json(res, 200, await repo.finish(id, input.claimToken, { success: false, error: input.error, uncertain: Boolean(input.uncertain) }));
+      }
     }
     return json(res, 405, { error: 'unsupported action or method' });
   } catch (error) {
@@ -176,7 +201,8 @@ module.exports = async function handler(req, res) {
       status
     });
     const safeStatus = status >= 400 && status < 600 ? status : 500;
-    const publicError = safeStatus === 413 ? 'content too large'
+    const publicError = safeStatus === 423 ? 'cloud writes temporarily locked'
+      : safeStatus === 413 ? 'content too large'
       : safeStatus === 409 ? 'conflict'
       : safeStatus === 404 ? 'not found'
         : safeStatus === 400 ? 'invalid request'

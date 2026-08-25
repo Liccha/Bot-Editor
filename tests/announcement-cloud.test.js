@@ -217,3 +217,32 @@ test('website post APIs reject unauthenticated callers', async () => {
   assert.equal((await call('GET', 'website-list')).status, 401);
   assert.equal((await call('POST', 'website-save', { body: { name: '未授权.md', content: 'x' } })).status, 401);
 });
+
+test('emergency lock keeps reads available and blocks every cloud mutation entry', async () => {
+  const desktopHeaders = { authorization: 'Desktop desktop-token-for-tests-only', 'x-admin-device': 'lock-test' };
+  const botHeaders = { authorization: 'Bot bot-token-for-tests-only' };
+  process.env.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK = '1';
+  try {
+    const health = await call('GET', 'health');
+    assert.equal(health.status, 200);
+    assert.equal(health.body.writeLocked, true);
+    assert.equal((await call('GET', 'list', { headers: desktopHeaders })).status, 200);
+    assert.equal((await call('POST', 'announcement', { headers: desktopHeaders, body: {
+      groupId: '858973074', title: '应被阻断', content: '应被阻断', time: '2026-08-30 10:00'
+    } })).status, 423);
+    assert.equal((await call('POST', 'website-save', { headers: desktopHeaders, body: {
+      name: 'blocked.md', content: 'blocked'
+    } })).status, 423);
+    assert.equal((await call('POST', 'upload-ticket', { headers: desktopHeaders, body: {
+      session: 'ann_blocked', type: 'attach', name: 'blocked.txt', size: 1
+    } })).status, 423);
+    assert.equal((await call('POST', 'desktop-ip-grant', { headers: {
+      ...desktopHeaders, 'x-vercel-forwarded-for': '203.0.113.30'
+    }, body: {} })).status, 423);
+    assert.equal((await call('POST', 'bot-claim', { headers: botHeaders, body: {
+      id: 'blocked', botId: 'test-bot'
+    } })).status, 423);
+  } finally {
+    delete process.env.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK;
+  }
+});

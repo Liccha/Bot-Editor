@@ -23,6 +23,7 @@ function config() {
     sessionSecret: required('ANNOUNCEMENT_SESSION_SECRET'),
     botToken: required('ANNOUNCEMENT_BOT_TOKEN'),
     desktopToken: required('ANNOUNCEMENT_DESKTOP_TOKEN'),
+    emergencyWriteLock: process.env.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK || '',
     hiddenGroupId: required('ANNOUNCEMENT_HIDDEN_GROUP_ID'),
     maxAttachmentBytes: Number(process.env.ANNOUNCEMENT_MAX_ATTACHMENT_BYTES || 100 * 1024 * 1024),
     maxImageBytes: Number(process.env.ANNOUNCEMENT_MAX_IMAGE_BYTES || 2 * 1024 * 1024)
