@@ -60,6 +60,33 @@ test('desktop editor has isolated token auth and writes the same cloud document'
   assert.equal((await call('DELETE', 'announcement', { headers: desktopHeaders, query: { id: created.body.id, revision: created.body.revision } })).status, 200);
 });
 
+test('Unicode attachment names survive ticketing, persistence, and legacy recovery', async () => {
+  const desktopHeaders = { authorization: 'Desktop desktop-token-for-tests-only', 'x-admin-device': 'filename-test' };
+  const ticket = await call('POST', 'upload-ticket', { headers: desktopHeaders, body: {
+    session: 'ann_filename_test', type: 'attach', name: '次元音符 第6期（终稿）.pdf', size: 12, contentType: 'application/pdf'
+  } });
+  assert.equal(ticket.status, 200);
+  assert.equal(ticket.body.name, '次元音符 第6期（终稿）.pdf');
+  assert.match(ticket.body.token, /-次元音符 第6期（终稿）\.pdf$/);
+  await getStore().put(ticket.body.token, Buffer.from('test-content'));
+
+  const created = await call('POST', 'announcement', { headers: desktopHeaders, body: {
+    groupId: '858973074', title: '附件名测试', content: '附件名测试', time: '2026-08-27 11:00',
+    attach: ticket.body.token, attachmentNames: JSON.stringify(['하루.txt'])
+  } });
+  assert.equal(created.status, 201);
+  assert.deepEqual(created.body.attachmentNames, ['하루.txt']);
+  assert.equal((await call('DELETE', 'announcement', {
+    headers: desktopHeaders, query: { id: created.body.id, revision: created.body.revision }
+  })).status, 200);
+
+  const repo = require('../api/_lib/repository');
+  assert.deepEqual(repo.normalizeAttachmentNames([], [
+    'uploads/ann_old/attach/7883dd3c-0349-4998-839f-4d0acddaa355-旧公告附件.zip'
+  ]), ['旧公告附件.zip']);
+  assert.equal(repo.sanitizeAttachmentName('../坏名?.zip', ''), '_坏名_.zip');
+});
+
 test('wrong hidden passphrase is an ordinary search and never changes devices', async () => {
   const before = await getStore().get('security/admin-devices.json');
   const result = await call('POST', 'admin-grant', { headers: { 'x-admin-device': 'ordinary-searcher' }, body: { d: 'ordinary-searcher', p: 'englishsongname' } });

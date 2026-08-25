@@ -48,7 +48,7 @@ function grantAttemptAllowed(req) {
   return count <= 30;
 }
 function sanitizeName(name) {
-  return String(name || 'file').replace(/[\\/\u0000-\u001f]/g, '_').replace(/^\.+/, '').slice(0, 160) || 'file';
+  return repo.sanitizeAttachmentName(name, 'file.bin');
 }
 
 module.exports = async function handler(req, res) {
@@ -112,10 +112,11 @@ module.exports = async function handler(req, res) {
       const size = Number(input.size || 0); const limit = type === 'image' ? cfg.maxImageBytes : cfg.maxAttachmentBytes;
       if (!size || size > limit) return json(res, 400, { error: `file size must be between 1 and ${limit}` });
       const sessionId = /^ann_[a-zA-Z0-9_-]+$/.test(String(input.session || '')) ? input.session : `ann_${Date.now()}`;
-      const key = `uploads/${sessionId}/${type}/${crypto.randomUUID()}-${sanitizeName(input.name)}`;
+      const originalName = sanitizeName(input.name);
+      const key = `uploads/${sessionId}/${type}/${crypto.randomUUID()}-${originalName}`;
       const uploadUrl = await getStore().signedPutUrl(key, input.contentType);
       await repo.writeAudit({ event: 'ATTACHMENT_UPLOAD_TICKET', actor: actor(req, session.sub, session.desktop ? 'mczmaker' : 'admin'), key, size, type });
-      return json(res, 200, { token: key, uploadUrl, method: 'PUT', headers: { 'Content-Type': input.contentType || 'application/octet-stream' } });
+      return json(res, 200, { token: key, name: originalName, uploadUrl, method: 'PUT', headers: { 'Content-Type': input.contentType || 'application/octet-stream' } });
     }
     if (action === 'delete-file' && req.method === 'DELETE') {
       const session = await admin(req, desktop); if (!session) return json(res, 401, { error: 'admin authorization required' });

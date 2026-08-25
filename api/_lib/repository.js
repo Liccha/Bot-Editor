@@ -54,6 +54,27 @@ function visible(item, hiddenGroupId) {
   return copy;
 }
 function normalizeBool(value) { return value === true || value === 'true'; }
+function attachmentNameFromToken(token) {
+  const name = String(token || '').replace(/\\/g, '/').split('/').pop() || '';
+  return name.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i, '') || 'file.bin';
+}
+function sanitizeAttachmentName(value, fallback) {
+  let name = String(value || '').normalize('NFC').replace(/[\\/:*?"<>|\x00-\x1f\x7f]/g, '_').replace(/^[. ]+|[. ]+$/g, '');
+  if (!name) name = String(fallback || '').normalize('NFC').replace(/[\\/:*?"<>|\x00-\x1f\x7f]/g, '_').replace(/^[. ]+|[. ]+$/g, '');
+  if (!name) name = 'file.bin';
+  return Array.from(name).slice(0, 160).join('');
+}
+function parseAttachmentNames(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim().startsWith('[')) {
+    try { const parsed = JSON.parse(raw); return Array.isArray(parsed) ? parsed : []; } catch (_) {}
+  }
+  return [];
+}
+function normalizeAttachmentNames(raw, tokens) {
+  const supplied = parseAttachmentNames(raw);
+  return tokens.map((token, index) => sanitizeAttachmentName(supplied[index], attachmentNameFromToken(token)));
+}
 function normalizeItem(raw, existing, hiddenGroupId) {
   const old = existing || {};
   const item = { ...old };
@@ -66,6 +87,9 @@ function normalizeItem(raw, existing, hiddenGroupId) {
   item.confirm = normalizeBool(raw.confirm) ? 'true' : 'false';
   item.image = String(raw.image || '');
   item.attach = String(raw.attach || raw.files || '');
+  const attachmentTokens = item.attach.split('|').filter(Boolean);
+  const rawAttachmentNames = Object.prototype.hasOwnProperty.call(raw, 'attachmentNames') ? raw.attachmentNames : old.attachmentNames;
+  item.attachmentNames = normalizeAttachmentNames(rawAttachmentNames, attachmentTokens);
   item.sent = old.sent === 'true' ? 'true' : (raw.sent === 'true' ? 'true' : 'false');
   item.status = item.sent === 'true' ? 'sent' : 'scheduled';
   if (item.sent !== 'true') { delete item.claim; delete item.nextAttemptAt; delete item.lastSendError; }
@@ -239,4 +263,7 @@ async function addDevice(device, actor) {
   });
 }
 
-module.exports = { list, create, update, softDelete, due, claim, finish, readDevices, deviceAllowed, addDevice, writeAudit, withLock };
+module.exports = {
+  list, create, update, softDelete, due, claim, finish, readDevices, deviceAllowed, addDevice, writeAudit, withLock,
+  attachmentNameFromToken, sanitizeAttachmentName, parseAttachmentNames, normalizeAttachmentNames
+};
