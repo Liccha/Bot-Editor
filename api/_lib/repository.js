@@ -4,6 +4,7 @@ const { config } = require('./config');
 
 const CURRENT_KEY = 'announcements/current.json';
 const DEVICES_KEY = 'security/admin-devices.json';
+const ADMIN_IPS_KEY = 'security/admin-ips.json';
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 async function withLock(name, operation) {
@@ -263,7 +264,36 @@ async function addDevice(device, actor) {
   });
 }
 
+async function readTrustedIps() {
+  const object = await getStore().get(ADMIN_IPS_KEY);
+  if (!object) return { fingerprints: [] };
+  const data = JSON.parse(object.body.toString('utf8'));
+  return { fingerprints: Array.isArray(data.fingerprints) ? data.fingerprints : [] };
+}
+async function trustedIpAllowed(fingerprint) {
+  if (!/^[a-f0-9]{64}$/.test(String(fingerprint || ''))) return false;
+  const state = await readTrustedIps();
+  return state.fingerprints.some(entry => (typeof entry === 'string' ? entry : entry.fingerprint) === fingerprint);
+}
+async function addTrustedIp(fingerprint, actor) {
+  if (!/^[a-f0-9]{64}$/.test(String(fingerprint || ''))) {
+    const error = new Error('invalid IP fingerprint'); error.statusCode = 400; throw error;
+  }
+  return withLock('admin-ips', async () => {
+    const state = await readTrustedIps();
+    if (!state.fingerprints.some(entry => (typeof entry === 'string' ? entry : entry.fingerprint) === fingerprint)) {
+      state.fingerprints.push({ fingerprint, createdAt: now(), source: 'desktop-password' });
+      await getStore().put(ADMIN_IPS_KEY, Buffer.from(JSON.stringify({
+        schema: 1, fingerprints: state.fingerprints, updatedAt: now()
+      })));
+      await writeAudit({ event: 'ADMIN_IP_GRANTED', actor, fingerprint });
+    }
+    return true;
+  });
+}
+
 module.exports = {
   list, create, update, softDelete, due, claim, finish, readDevices, deviceAllowed, addDevice, writeAudit, withLock,
+  readTrustedIps, trustedIpAllowed, addTrustedIp,
   attachmentNameFromToken, sanitizeAttachmentName, parseAttachmentNames, normalizeAttachmentNames
 };

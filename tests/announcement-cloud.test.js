@@ -60,6 +60,34 @@ test('desktop editor has isolated token auth and writes the same cloud document'
   assert.equal((await call('DELETE', 'announcement', { headers: desktopHeaders, query: { id: created.body.id, revision: created.body.revision } })).status, 200);
 });
 
+test('desktop password grant permanently trusts only the edge-observed IP fingerprint', async () => {
+  const desktopHeaders = {
+    authorization: 'Desktop desktop-token-for-tests-only',
+    'x-admin-device': 'workstation-ip-test',
+    'x-vercel-forwarded-for': '203.0.113.9',
+    'x-forwarded-for': '198.51.100.77'
+  };
+  const initial = await call('GET', 'desktop-ip-check', { headers: desktopHeaders });
+  assert.equal(initial.status, 200);
+  assert.equal(initial.body.trusted, false);
+  const granted = await call('POST', 'desktop-ip-grant', { headers: desktopHeaders, body: {} });
+  assert.deepEqual(granted.body, { trusted: true });
+  assert.equal((await call('GET', 'desktop-ip-check', { headers: desktopHeaders })).body.trusted, true);
+
+  const spoofed = { ...desktopHeaders, 'x-forwarded-for': '203.0.113.9', 'x-vercel-forwarded-for': '203.0.113.10' };
+  assert.equal((await call('GET', 'desktop-ip-check', { headers: spoofed })).body.trusted, false);
+  const missingEdgeIdentity = { ...desktopHeaders };
+  delete missingEdgeIdentity['x-vercel-forwarded-for'];
+  assert.equal((await call('GET', 'desktop-ip-check', { headers: missingEdgeIdentity })).status, 400);
+  assert.equal((await call('GET', 'desktop-ip-check', { headers: { ...desktopHeaders, authorization: 'Desktop wrong' } })).status, 401);
+
+  const stored = await getStore().get('security/admin-ips.json');
+  const text = stored.body.toString('utf8');
+  assert.doesNotMatch(text, /203\.0\.113\.9|198\.51\.100\.77/);
+  const document = JSON.parse(text);
+  assert.match(document.fingerprints[0].fingerprint, /^[a-f0-9]{64}$/);
+});
+
 test('Unicode attachment names survive ticketing, persistence, and legacy recovery', async () => {
   const desktopHeaders = { authorization: 'Desktop desktop-token-for-tests-only', 'x-admin-device': 'filename-test' };
   const ticket = await call('POST', 'upload-ticket', { headers: desktopHeaders, body: {

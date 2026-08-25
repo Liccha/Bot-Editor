@@ -55,8 +55,31 @@ function desktopAuthorized(req) {
   const value = String(req.headers.authorization || '');
   return value.startsWith('Desktop ') && safeEqual(value.slice(8), cfg.desktopToken);
 }
+function normalizeIp(value) {
+  let ip = String(value || '').split(',')[0].trim().toLowerCase();
+  if (!ip) return '';
+  if (ip.startsWith('[') && ip.includes(']')) ip = ip.slice(1, ip.indexOf(']'));
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  const zone = ip.indexOf('%');
+  if (zone >= 0) ip = ip.slice(0, zone);
+  return ip;
+}
 function clientIp(req) {
-  return String(req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim();
+  // Vercel overwrites x-vercel-forwarded-for at the trusted edge. Prefer it so a
+  // caller-supplied x-forwarded-for value cannot choose the identity we trust.
+  return normalizeIp(req.headers['x-vercel-forwarded-for'] || req.headers['x-forwarded-for']
+    || req.headers['x-real-ip'] || req.socket?.remoteAddress || '');
+}
+function trustedEdgeIp(req) {
+  return normalizeIp(req.headers['x-vercel-forwarded-for']);
+}
+function ipFingerprint(req) {
+  // Never fall back to caller-controlled forwarding headers for a value that
+  // becomes an authorization factor. Vercel injects this header at its edge.
+  const ip = trustedEdgeIp(req);
+  if (!ip) return '';
+  return crypto.createHmac('sha256', config().sessionSecret).update(`admin-ip\0${ip}`).digest('hex');
 }
 
-module.exports = { passwordHash, passwordMatches, signSession, verifySession, sessionFromRequest, botAuthorized, desktopAuthorized, clientIp, safeEqual };
+module.exports = { passwordHash, passwordMatches, signSession, verifySession, sessionFromRequest,
+  botAuthorized, desktopAuthorized, clientIp, trustedEdgeIp, ipFingerprint, normalizeIp, safeEqual };

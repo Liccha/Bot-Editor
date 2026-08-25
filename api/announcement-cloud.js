@@ -60,6 +60,21 @@ module.exports = async function handler(req, res) {
     const desktop = security.desktopAuthorized(req);
     if (!action.startsWith('bot-') && !desktop && !browserAllowed(req, cfg)) return json(res, 403, { error: 'origin not allowed' });
 
+    if (action === 'desktop-ip-check' && req.method === 'GET') {
+      if (!desktop) return json(res, 401, { error: 'desktop authorization required' });
+      const fingerprint = security.ipFingerprint(req);
+      if (!fingerprint) return json(res, 400, { error: 'client address unavailable' });
+      return json(res, 200, { trusted: await repo.trustedIpAllowed(fingerprint) });
+    }
+    if (action === 'desktop-ip-grant' && req.method === 'POST') {
+      if (!desktop) return json(res, 401, { error: 'desktop authorization required' });
+      const fingerprint = security.ipFingerprint(req);
+      if (!fingerprint) return json(res, 400, { error: 'client address unavailable' });
+      const dev = device(req) || 'bot-workstation';
+      await repo.addTrustedIp(fingerprint, { kind: 'workstation', device: dev });
+      return json(res, 200, { trusted: true });
+    }
+
     if (action === 'admin-check' && req.method === 'GET') {
       const session = await admin(req); const dev = device(req);
       return session
