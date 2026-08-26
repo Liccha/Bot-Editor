@@ -5,12 +5,15 @@ const emergency = require('./_lib/emergency-lock');
 const repo = require('./_lib/repository');
 
 const DEVICES_KEY = 'security/mobile-devices.json';
-const QUEUE_KEY = 'mobile-relay/queue.json';
+const REQUEST_PREFIX = 'mobile-relay/requests/';
+const RESPONSE_PREFIX = 'mobile-relay/responses/';
+const CLAIM_PREFIX = 'mobile-relay/claims/';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
 const RESPONSE_TTL_MS = 60 * 60 * 1000;
 const CLAIM_MS = 15 * 60 * 1000;
 const MAX_DEVICES = 50;
 const MAX_QUEUE = 500;
+let lastResponseCleanupAt = 0;
 
 function json(res, status, value) {
   res.statusCode = status;
@@ -53,19 +56,38 @@ async function readDevices() {
   return { schema: 1, devices: Array.isArray(value.devices) ? value.devices : [] };
 }
 
-async function readQueue() {
-  const value = await readJson(QUEUE_KEY, { schema: 1, items: [] });
-  return { schema: 1, items: Array.isArray(value.items) ? value.items : [] };
+function requestKey(id) { return `${REQUEST_PREFIX}${id}.json`; }
+function responseKey(id) { return `${RESPONSE_PREFIX}${id}.json`; }
+function claimKey(id) { return `${CLAIM_PREFIX}${id}.json`; }
+function objectExists(error) {
+  return Number(error?.status || error?.statusCode || 0) === 409
+    || ['FileAlreadyExists', 'ObjectAlreadyExists'].includes(String(error?.code || ''));
 }
-
-function cleanQueue(document) {
-  const time = Date.now();
-  document.items = document.items.filter(item => {
-    if (item.state === 'complete') return Date.parse(item.completedAt || 0) + RESPONSE_TTL_MS > time;
-    return Date.parse(item.expiresAt || 0) > time;
-  });
-  if (document.items.length > MAX_QUEUE) document.items = document.items.slice(-MAX_QUEUE);
-  return document;
+async function acquireClaim(id) {
+  const key = claimKey(id);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + CLAIM_MS).toISOString();
+    try {
+      await getStore().put(key, Buffer.from(JSON.stringify({ token, expiresAt })), { forbidOverwrite: true });
+      return { token, expiresAt };
+    } catch (error) {
+      if (!objectExists(error)) throw error;
+      const existing = await readJson(key, null);
+      if (existing && Date.parse(existing.expiresAt || 0) > Date.now()) return null;
+      await getStore().delete(key).catch(() => {});
+    }
+  }
+  return null;
+}
+async function cleanupResponses() {
+  if (Date.now() - lastResponseCleanupAt < 5 * 60 * 1000) return;
+  lastResponseCleanupAt = Date.now();
+  const keys = await getStore().list(RESPONSE_PREFIX, 1000);
+  for (const key of keys) {
+    const item = await readJson(key, null);
+    if (!item || Date.parse(item.expiresAt || 0) <= Date.now()) await getStore().delete(key).catch(() => {});
+  }
 }
 
 async function deviceFromRequest(req) {
@@ -189,51 +211,47 @@ module.exports = async function handler(req, res) {
       }
       const item = { id: crypto.randomUUID(), deviceId: device.id, createdAt: now(),
         expiresAt: new Date(Date.now() + REQUEST_TTL_MS).toISOString(), state: 'pending', payload };
-      await repo.withLock('mobile-relay-queue', async () => {
-        const document = cleanQueue(await readQueue());
-        document.items.push(item);
-        await getStore().put(QUEUE_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })));
-      });
+      const queued = await getStore().list(REQUEST_PREFIX, MAX_QUEUE + 1);
+      if (queued.length >= MAX_QUEUE) throw rateLimited();
+      await getStore().put(requestKey(item.id), Buffer.from(JSON.stringify(item)), { forbidOverwrite: true });
       return json(res, 202, { id: item.id, state: item.state });
     }
 
     if (action === 'result' && req.method === 'GET') {
       const device = await deviceFromRequest(req); if (!device) throw unauthorized();
       const id = safeId(query(req, 'id')); if (!id) throw badRequest();
-      const document = cleanQueue(await readQueue());
-      const item = document.items.find(candidate => candidate.id === id && candidate.deviceId === device.id);
-      if (!item) throw notFound();
-      return json(res, item.state === 'complete' ? 200 : 202,
-        item.state === 'complete' ? { id, state: item.state, response: item.response } : { id, state: item.state });
+      const completed = await readJson(responseKey(id), null);
+      if (completed) {
+        if (completed.deviceId !== device.id || Date.parse(completed.expiresAt || 0) <= Date.now()) throw notFound();
+        return json(res, 200, { id, state: 'complete', response: completed.response });
+      }
+      const pending = await readJson(requestKey(id), null);
+      if (!pending || pending.deviceId !== device.id || Date.parse(pending.expiresAt || 0) <= Date.now()) throw notFound();
+      return json(res, 202, { id, state: 'pending' });
     }
 
     if (action === 'desktop-poll' && req.method === 'GET') {
       if (!desktop) throw unauthorized();
       await emergency.assertWriteAllowed();
-      // Empty polling is the steady state. Avoid taking and rewriting the shared
-      // queue lock unless there is actually work to claim; otherwise a poll every
-      // 1.8 seconds can continuously starve mobile submissions on remote OSS.
-      const preview = cleanQueue(await readQueue());
-      const previewTime = Date.now();
-      const hasClaimable = preview.items.some(item => (item.state === 'pending')
-        || (item.state === 'claimed' && Date.parse(item.claimExpiresAt || 0) <= previewTime));
-      if (!hasClaimable) return json(res, 200, { items: [] });
       const claimed = [];
-      await repo.withLock('mobile-relay-queue', async () => {
-        const document = cleanQueue(await readQueue()); const time = Date.now();
-        for (const item of document.items) {
-          if (claimed.length >= 5) break;
-          if (item.state === 'claimed' && Date.parse(item.claimExpiresAt || 0) > time) continue;
-          if (item.state !== 'pending' && item.state !== 'claimed') continue;
-          item.state = 'claimed'; item.claimToken = crypto.randomUUID(); item.claimExpiresAt = new Date(time + CLAIM_MS).toISOString();
-          const copy = JSON.parse(JSON.stringify(item));
-          if (copy.payload?.path === '/api/song-asset' && copy.payload.body?.key) {
-            copy.payload.body.downloadUrl = await getStore().signedGetUrl(copy.payload.body.key);
-          }
-          claimed.push(copy);
+      const keys = await getStore().list(REQUEST_PREFIX, MAX_QUEUE);
+      for (const key of keys) {
+        if (claimed.length >= 5) break;
+        const item = await readJson(key, null);
+        if (!item || !safeId(item.id)) continue;
+        if (Date.parse(item.expiresAt || 0) <= Date.now()) {
+          await Promise.all([getStore().delete(key).catch(() => {}), getStore().delete(claimKey(item.id)).catch(() => {})]);
+          continue;
         }
-        if (claimed.length) await getStore().put(QUEUE_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })));
-      });
+        const claim = await acquireClaim(item.id);
+        if (!claim) continue;
+        const copy = { ...JSON.parse(JSON.stringify(item)), state: 'claimed', claimToken: claim.token, claimExpiresAt: claim.expiresAt };
+        if (copy.payload?.path === '/api/song-asset' && copy.payload.body?.key) {
+          copy.payload.body.downloadUrl = await getStore().signedGetUrl(copy.payload.body.key);
+        }
+        claimed.push(copy);
+      }
+      await cleanupResponses();
       return json(res, 200, { items: claimed });
     }
 
@@ -242,17 +260,19 @@ module.exports = async function handler(req, res) {
       await emergency.assertWriteAllowed();
       const input = body(req); const id = safeId(input.id); const claimToken = safeId(input.claimToken);
       if (!id || !claimToken) throw badRequest();
-      let completedAssetKey = '';
-      await repo.withLock('mobile-relay-queue', async () => {
-        const document = cleanQueue(await readQueue());
-        const item = document.items.find(candidate => candidate.id === id);
-        if (!item || item.state !== 'claimed' || item.claimToken !== claimToken) throw conflict();
-        if (item.payload?.path === '/api/song-asset') completedAssetKey = String(item.payload.body?.key || '');
-        item.state = 'complete'; item.completedAt = now();
-        item.response = { status: Math.max(100, Math.min(599, Number(input.status || 500))), body: input.body && typeof input.body === 'object' ? input.body : {} };
-        delete item.claimToken; delete item.claimExpiresAt; delete item.payload;
-        await getStore().put(QUEUE_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })));
-      });
+      const claim = await readJson(claimKey(id), null);
+      if (!claim || claim.token !== claimToken) throw conflict();
+      const item = await readJson(requestKey(id), null);
+      if (!item || item.id !== id) throw conflict();
+      const completedAssetKey = item.payload?.path === '/api/song-asset' ? String(item.payload.body?.key || '') : '';
+      const completedAt = now();
+      const completed = {
+        id, deviceId: item.deviceId, state: 'complete', completedAt,
+        expiresAt: new Date(Date.now() + RESPONSE_TTL_MS).toISOString(),
+        response: { status: Math.max(100, Math.min(599, Number(input.status || 500))), body: input.body && typeof input.body === 'object' ? input.body : {} }
+      };
+      await getStore().put(responseKey(id), Buffer.from(JSON.stringify(completed)));
+      await Promise.all([getStore().delete(requestKey(id)).catch(() => {}), getStore().delete(claimKey(id)).catch(() => {})]);
       if (completedAssetKey.startsWith('mobile-assets/')) await getStore().delete(completedAssetKey).catch(() => {});
       return json(res, 200, { ok: true });
     }
