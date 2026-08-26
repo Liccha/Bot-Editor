@@ -53,9 +53,42 @@ async function readDevices() {
   return { schema: 1, devices: Array.isArray(value.devices) ? value.devices : [] };
 }
 
+async function readQueueState() {
+  const object = await getStore().get(QUEUE_KEY);
+  if (!object) return { document: { schema: 1, items: [] }, etag: null };
+  const value = JSON.parse(object.body.toString('utf8'));
+  return {
+    document: { schema: 1, items: Array.isArray(value?.items) ? value.items : [] },
+    etag: object.etag || null
+  };
+}
+
 async function readQueue() {
-  const value = await readJson(QUEUE_KEY, { schema: 1, items: [] });
-  return { schema: 1, items: Array.isArray(value.items) ? value.items : [] };
+  return (await readQueueState()).document;
+}
+
+function preconditionFailed(error) {
+  return Number(error?.status || error?.statusCode || 0) === 412
+    || ['PreconditionFailed', 'ConditionNotMatch'].includes(String(error?.code || ''));
+}
+
+async function updateQueue(operation) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const state = await readQueueState();
+    const before = JSON.stringify(state.document);
+    const document = cleanQueue(state.document);
+    const result = await operation(document);
+    if (JSON.stringify(document) === before) return result;
+    try {
+      const options = state.etag ? { ifMatch: state.etag } : { ifNoneMatch: true };
+      await getStore().put(QUEUE_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })), options);
+      return result;
+    } catch (error) {
+      if (!preconditionFailed(error)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 20 + Math.floor(Math.random() * 30)));
+    }
+  }
+  const error = new Error('relay queue is busy'); error.statusCode = 503; throw error;
 }
 
 function cleanQueue(document) {
@@ -189,10 +222,8 @@ module.exports = async function handler(req, res) {
       }
       const item = { id: crypto.randomUUID(), deviceId: device.id, createdAt: now(),
         expiresAt: new Date(Date.now() + REQUEST_TTL_MS).toISOString(), state: 'pending', payload };
-      await repo.withLock('mobile-relay-queue', async () => {
-        const document = cleanQueue(await readQueue());
+      await updateQueue(document => {
         document.items.push(item);
-        await getStore().put(QUEUE_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })));
       });
       return json(res, 202, { id: item.id, state: item.state });
     }
@@ -210,11 +241,10 @@ module.exports = async function handler(req, res) {
     if (action === 'desktop-poll' && req.method === 'GET') {
       if (!desktop) throw unauthorized();
       await emergency.assertWriteAllowed();
-      const claimed = [];
-      await repo.withLock('mobile-relay-queue', async () => {
-        const document = cleanQueue(await readQueue()); const time = Date.now();
+      const claimed = await updateQueue(async document => {
+        const selected = []; const time = Date.now();
         for (const item of document.items) {
-          if (claimed.length >= 5) break;
+          if (selected.length >= 5) break;
           if (item.state === 'claimed' && Date.parse(item.claimExpiresAt || 0) > time) continue;
           if (item.state !== 'pending' && item.state !== 'claimed') continue;
           item.state = 'claimed'; item.claimToken = crypto.randomUUID(); item.claimExpiresAt = new Date(time + CLAIM_MS).toISOString();
@@ -222,9 +252,9 @@ module.exports = async function handler(req, res) {
           if (copy.payload?.path === '/api/song-asset' && copy.payload.body?.key) {
             copy.payload.body.downloadUrl = await getStore().signedGetUrl(copy.payload.body.key);
           }
-          claimed.push(copy);
+          selected.push(copy);
         }
-        await getStore().put(QUEUE_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })));
+        return selected;
       });
       return json(res, 200, { items: claimed });
     }
@@ -235,15 +265,13 @@ module.exports = async function handler(req, res) {
       const input = body(req); const id = safeId(input.id); const claimToken = safeId(input.claimToken);
       if (!id || !claimToken) throw badRequest();
       let completedAssetKey = '';
-      await repo.withLock('mobile-relay-queue', async () => {
-        const document = cleanQueue(await readQueue());
+      await updateQueue(document => {
         const item = document.items.find(candidate => candidate.id === id);
         if (!item || item.state !== 'claimed' || item.claimToken !== claimToken) throw conflict();
         if (item.payload?.path === '/api/song-asset') completedAssetKey = String(item.payload.body?.key || '');
         item.state = 'complete'; item.completedAt = now();
         item.response = { status: Math.max(100, Math.min(599, Number(input.status || 500))), body: input.body && typeof input.body === 'object' ? input.body : {} };
         delete item.claimToken; delete item.claimExpiresAt; delete item.payload;
-        await getStore().put(QUEUE_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })));
       });
       if (completedAssetKey.startsWith('mobile-assets/')) await getStore().delete(completedAssetKey).catch(() => {});
       return json(res, 200, { ok: true });

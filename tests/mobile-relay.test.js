@@ -63,6 +63,25 @@ test('device request crosses networks, is executed once, and returns only to its
   assert.equal((await call('GET', 'result', { headers: { authorization: `Device ${other.body.token}` }, query: { id: submitted.body.id } })).status, 404);
 });
 
+test('device submit is not starved by the desktop polling lock', async () => {
+  const registered = await call('POST', 'register-device', { headers: desktop, body: { name: '并发轮询测试' } });
+  const lockKey = 'locks/mobile-relay-queue.json';
+  await getStore().put(lockKey, Buffer.from(JSON.stringify({
+    token: crypto.randomUUID(), expiresAt: new Date(Date.now() + 30_000).toISOString()
+  })));
+  const started = Date.now();
+  try {
+    const submitted = await call('POST', 'submit', {
+      headers: { authorization: `Device ${registered.body.token}` },
+      body: { method: 'GET', path: '/api/status', query: {}, body: {} }
+    });
+    assert.equal(submitted.status, 202);
+    assert.ok(Date.now() - started < 1_000, 'submit waited for the desktop polling lock');
+  } finally {
+    await getStore().delete(lockKey);
+  }
+});
+
 test('relay rejects arbitrary paths and revoked accounts immediately', async () => {
   const registered = await call('POST', 'register-device', { headers: desktop, body: { name: '待撤销' } });
   const headers = { authorization: `Device ${registered.body.token}` };
