@@ -10,6 +10,7 @@ const CLAIM_PREFIX = 'mobile-relay/claims/';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
 const RESPONSE_TTL_MS = 60 * 60 * 1000;
 const CLAIM_MS = 15 * 60 * 1000;
+const RESULT_REUSE_GRACE_MS = 30 * 1000;
 const MAX_DEVICES = 50;
 const DEVICE_SLOTS = 8;
 
@@ -86,6 +87,12 @@ async function readSlots(deviceId) {
 function expired(item) {
   return !item || Date.parse(item.expiresAt || 0) <= Date.now();
 }
+function reusable(item) {
+  if (expired(item)) return true;
+  if (item?.state !== 'complete') return false;
+  if (item.deliveredAt) return true;
+  return Date.parse(item.completedAt || 0) <= Date.now() - RESULT_REUSE_GRACE_MS;
+}
 async function placeInSlot(item) {
   for (let index = 0; index < DEVICE_SLOTS; index++) {
     const key = slotKey(item.deviceId, index);
@@ -96,7 +103,7 @@ async function placeInSlot(item) {
       } catch (error) {
         if (!objectExists(error)) throw error;
         const existing = await readJson(key, null);
-        if (!expired(existing)) break;
+        if (!reusable(existing)) break;
         await getStore().delete(key).catch(() => {});
       }
     }
@@ -232,8 +239,13 @@ module.exports = async function handler(req, res) {
     if (action === 'result' && req.method === 'GET') {
       const device = await deviceFromRequest(req); if (!device) throw unauthorized();
       const id = safeId(query(req, 'id')); if (!id) throw badRequest();
-      const record = (await readSlots(device.id)).map(slot => slot.item).find(item => item?.id === id);
+      const slot = (await readSlots(device.id)).find(candidate => candidate.item?.id === id);
+      const record = slot?.item;
       if (!record || expired(record)) throw notFound();
+      if (record.state === 'complete' && !record.deliveredAt) {
+        record.deliveredAt = now();
+        await getStore().put(slot.key, Buffer.from(JSON.stringify(record)));
+      }
       return json(res, record.state === 'complete' ? 200 : 202,
         record.state === 'complete' ? { id, state: 'complete', response: record.response } : { id, state: 'pending' });
     }
