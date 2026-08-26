@@ -66,18 +66,6 @@ class LocalStore {
     try { const stat = await fs.stat(this.resolve(key)); return { size: stat.size }; }
     catch (error) { if (error.code === 'ENOENT') return null; throw error; }
   }
-  async list(prefix, limit = 1000) {
-    const normalized = String(prefix || '').replace(/\\/g, '/');
-    const directory = this.resolve(normalized);
-    try {
-      const entries = await fs.readdir(directory, { withFileTypes: true });
-      return entries.filter(entry => entry.isFile()).slice(0, Math.max(1, Math.min(1000, Number(limit) || 1000)))
-        .map(entry => `${normalized}${entry.name}`);
-    } catch (error) {
-      if (error.code === 'ENOENT') return [];
-      throw error;
-    }
-  }
   async signedPutUrl(key) { return `/api/announcement-cloud?action=local-upload&key=${encodeURIComponent(key)}`; }
   async signedGetUrl(key) { return `/api/announcement-cloud?action=local-file&key=${encodeURIComponent(key)}`; }
 }
@@ -111,13 +99,6 @@ class OssStore {
       if (error.status === 404 || error.code === 'NoSuchKey') return null;
       throw error;
     }
-  }
-  async list(prefix, limit = 1000) {
-    const result = await this.client.list({
-      prefix: String(prefix || ''),
-      'max-keys': Math.max(1, Math.min(1000, Number(limit) || 1000))
-    });
-    return (Array.isArray(result.objects) ? result.objects : []).map(item => String(item.name || '')).filter(Boolean);
   }
   async signedPutUrl(key, contentType) {
     return this.client.signatureUrl(key, { method: 'PUT', expires: 300, 'Content-Type': contentType || 'application/octet-stream' });

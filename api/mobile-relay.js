@@ -5,15 +5,13 @@ const emergency = require('./_lib/emergency-lock');
 const repo = require('./_lib/repository');
 
 const DEVICES_KEY = 'security/mobile-devices.json';
-const REQUEST_PREFIX = 'mobile-relay/requests/';
-const RESPONSE_PREFIX = 'mobile-relay/responses/';
+const INBOX_PREFIX = 'mobile-relay/inboxes/';
 const CLAIM_PREFIX = 'mobile-relay/claims/';
 const REQUEST_TTL_MS = 30 * 60 * 1000;
 const RESPONSE_TTL_MS = 60 * 60 * 1000;
 const CLAIM_MS = 15 * 60 * 1000;
 const MAX_DEVICES = 50;
-const MAX_QUEUE = 500;
-let lastResponseCleanupAt = 0;
+const DEVICE_SLOTS = 8;
 
 function json(res, status, value) {
   res.statusCode = status;
@@ -56,20 +54,19 @@ async function readDevices() {
   return { schema: 1, devices: Array.isArray(value.devices) ? value.devices : [] };
 }
 
-function requestKey(id) { return `${REQUEST_PREFIX}${id}.json`; }
-function responseKey(id) { return `${RESPONSE_PREFIX}${id}.json`; }
+function slotKey(deviceId, index) { return `${INBOX_PREFIX}${deviceId}/${index}.json`; }
 function claimKey(id) { return `${CLAIM_PREFIX}${id}.json`; }
 function objectExists(error) {
   return Number(error?.status || error?.statusCode || 0) === 409
     || ['FileAlreadyExists', 'ObjectAlreadyExists'].includes(String(error?.code || ''));
 }
-async function acquireClaim(id) {
+async function acquireClaim(id, inboxKey) {
   const key = claimKey(id);
   for (let attempt = 0; attempt < 2; attempt++) {
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + CLAIM_MS).toISOString();
     try {
-      await getStore().put(key, Buffer.from(JSON.stringify({ token, expiresAt })), { forbidOverwrite: true });
+      await getStore().put(key, Buffer.from(JSON.stringify({ token, expiresAt, inboxKey })), { forbidOverwrite: true });
       return { token, expiresAt };
     } catch (error) {
       if (!objectExists(error)) throw error;
@@ -80,14 +77,31 @@ async function acquireClaim(id) {
   }
   return null;
 }
-async function cleanupResponses() {
-  if (Date.now() - lastResponseCleanupAt < 5 * 60 * 1000) return;
-  lastResponseCleanupAt = Date.now();
-  const keys = await getStore().list(RESPONSE_PREFIX, 1000);
-  for (const key of keys) {
-    const item = await readJson(key, null);
-    if (!item || Date.parse(item.expiresAt || 0) <= Date.now()) await getStore().delete(key).catch(() => {});
+async function readSlots(deviceId) {
+  return Promise.all(Array.from({ length: DEVICE_SLOTS }, async (_, index) => {
+    const key = slotKey(deviceId, index);
+    return { key, item: await readJson(key, null) };
+  }));
+}
+function expired(item) {
+  return !item || Date.parse(item.expiresAt || 0) <= Date.now();
+}
+async function placeInSlot(item) {
+  for (let index = 0; index < DEVICE_SLOTS; index++) {
+    const key = slotKey(item.deviceId, index);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await getStore().put(key, Buffer.from(JSON.stringify(item)), { forbidOverwrite: true });
+        return true;
+      } catch (error) {
+        if (!objectExists(error)) throw error;
+        const existing = await readJson(key, null);
+        if (!expired(existing)) break;
+        await getStore().delete(key).catch(() => {});
+      }
+    }
   }
+  return false;
 }
 
 async function deviceFromRequest(req) {
@@ -211,39 +225,34 @@ module.exports = async function handler(req, res) {
       }
       const item = { id: crypto.randomUUID(), deviceId: device.id, createdAt: now(),
         expiresAt: new Date(Date.now() + REQUEST_TTL_MS).toISOString(), state: 'pending', payload };
-      const queued = await getStore().list(REQUEST_PREFIX, MAX_QUEUE + 1);
-      if (queued.length >= MAX_QUEUE) throw rateLimited();
-      await getStore().put(requestKey(item.id), Buffer.from(JSON.stringify(item)), { forbidOverwrite: true });
+      if (!(await placeInSlot(item))) throw rateLimited();
       return json(res, 202, { id: item.id, state: item.state });
     }
 
     if (action === 'result' && req.method === 'GET') {
       const device = await deviceFromRequest(req); if (!device) throw unauthorized();
       const id = safeId(query(req, 'id')); if (!id) throw badRequest();
-      const completed = await readJson(responseKey(id), null);
-      if (completed) {
-        if (completed.deviceId !== device.id || Date.parse(completed.expiresAt || 0) <= Date.now()) throw notFound();
-        return json(res, 200, { id, state: 'complete', response: completed.response });
-      }
-      const pending = await readJson(requestKey(id), null);
-      if (!pending || pending.deviceId !== device.id || Date.parse(pending.expiresAt || 0) <= Date.now()) throw notFound();
-      return json(res, 202, { id, state: 'pending' });
+      const record = (await readSlots(device.id)).map(slot => slot.item).find(item => item?.id === id);
+      if (!record || expired(record)) throw notFound();
+      return json(res, record.state === 'complete' ? 200 : 202,
+        record.state === 'complete' ? { id, state: 'complete', response: record.response } : { id, state: 'pending' });
     }
 
     if (action === 'desktop-poll' && req.method === 'GET') {
       if (!desktop) throw unauthorized();
       await emergency.assertWriteAllowed();
       const claimed = [];
-      const keys = await getStore().list(REQUEST_PREFIX, MAX_QUEUE);
-      for (const key of keys) {
+      const devices = (await readDevices()).devices.filter(device => device.status !== 'revoked');
+      const slots = (await Promise.all(devices.map(device => readSlots(device.id)))).flat();
+      for (const { key, item } of slots) {
         if (claimed.length >= 5) break;
-        const item = await readJson(key, null);
         if (!item || !safeId(item.id)) continue;
-        if (Date.parse(item.expiresAt || 0) <= Date.now()) {
+        if (expired(item)) {
           await Promise.all([getStore().delete(key).catch(() => {}), getStore().delete(claimKey(item.id)).catch(() => {})]);
           continue;
         }
-        const claim = await acquireClaim(item.id);
+        if (item.state === 'complete') continue;
+        const claim = await acquireClaim(item.id, key);
         if (!claim) continue;
         const copy = { ...JSON.parse(JSON.stringify(item)), state: 'claimed', claimToken: claim.token, claimExpiresAt: claim.expiresAt };
         if (copy.payload?.path === '/api/song-asset' && copy.payload.body?.key) {
@@ -251,7 +260,6 @@ module.exports = async function handler(req, res) {
         }
         claimed.push(copy);
       }
-      await cleanupResponses();
       return json(res, 200, { items: claimed });
     }
 
@@ -261,8 +269,8 @@ module.exports = async function handler(req, res) {
       const input = body(req); const id = safeId(input.id); const claimToken = safeId(input.claimToken);
       if (!id || !claimToken) throw badRequest();
       const claim = await readJson(claimKey(id), null);
-      if (!claim || claim.token !== claimToken) throw conflict();
-      const item = await readJson(requestKey(id), null);
+      if (!claim || claim.token !== claimToken || !String(claim.inboxKey || '').startsWith(INBOX_PREFIX)) throw conflict();
+      const item = await readJson(claim.inboxKey, null);
       if (!item || item.id !== id) throw conflict();
       const completedAssetKey = item.payload?.path === '/api/song-asset' ? String(item.payload.body?.key || '') : '';
       const completedAt = now();
@@ -271,8 +279,8 @@ module.exports = async function handler(req, res) {
         expiresAt: new Date(Date.now() + RESPONSE_TTL_MS).toISOString(),
         response: { status: Math.max(100, Math.min(599, Number(input.status || 500))), body: input.body && typeof input.body === 'object' ? input.body : {} }
       };
-      await getStore().put(responseKey(id), Buffer.from(JSON.stringify(completed)));
-      await Promise.all([getStore().delete(requestKey(id)).catch(() => {}), getStore().delete(claimKey(id)).catch(() => {})]);
+      await getStore().put(claim.inboxKey, Buffer.from(JSON.stringify(completed)));
+      await getStore().delete(claimKey(id)).catch(() => {});
       if (completedAssetKey.startsWith('mobile-assets/')) await getStore().delete(completedAssetKey).catch(() => {});
       return json(res, 200, { ok: true });
     }
