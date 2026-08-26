@@ -59,7 +59,7 @@ const manifest = {
   sha256: setupHash,
   size: setupSize,
   publishedAt: new Date().toISOString(),
-  notes: '优化公告卡片、Stable 抓取、手机端地址复制与模块载入；加入跨设备容错、自动更新及云端紧急写入总闸。',
+  notes: '手机端首次局域网配对后可跨网络长期使用；歌曲编辑同步保存 CSV 与数据库；支持完整字段、图片和音频上传；优化 Stable 日期和运营页布局。',
   backup: {
     url: `${publicBase}/${standaloneKey}`,
     sha256: standaloneHash,
