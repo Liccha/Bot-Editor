@@ -61,6 +61,10 @@ function objectExists(error) {
   return Number(error?.status || error?.statusCode || 0) === 409
     || ['FileAlreadyExists', 'ObjectAlreadyExists'].includes(String(error?.code || ''));
 }
+function preconditionFailed(error) {
+  return Number(error?.status || error?.statusCode || 0) === 412
+    || String(error?.code || '') === 'PreconditionFailed';
+}
 async function acquireClaim(id, inboxKey) {
   const key = claimKey(id);
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -78,11 +82,14 @@ async function acquireClaim(id, inboxKey) {
   }
   return null;
 }
+async function readSlot(key) {
+  const object = await getStore().get(key);
+  if (!object) return { key, item: null, etag: null };
+  const value = JSON.parse(object.body.toString('utf8'));
+  return { key, item: value && typeof value === 'object' ? value : null, etag: object.etag };
+}
 async function readSlots(deviceId) {
-  return Promise.all(Array.from({ length: DEVICE_SLOTS }, async (_, index) => {
-    const key = slotKey(deviceId, index);
-    return { key, item: await readJson(key, null) };
-  }));
+  return Promise.all(Array.from({ length: DEVICE_SLOTS }, (_, index) => readSlot(slotKey(deviceId, index))));
 }
 function expired(item) {
   return !item || Date.parse(item.expiresAt || 0) <= Date.now();
@@ -96,16 +103,20 @@ function reusable(item) {
 async function placeInSlot(item) {
   for (let index = 0; index < DEVICE_SLOTS; index++) {
     const key = slotKey(item.deviceId, index);
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        await getStore().put(key, Buffer.from(JSON.stringify(item)), { forbidOverwrite: true });
-        return true;
-      } catch (error) {
-        if (!objectExists(error)) throw error;
-        const existing = await readJson(key, null);
-        if (!reusable(existing)) break;
-        await getStore().delete(key).catch(() => {});
-      }
+    const bytes = Buffer.from(JSON.stringify(item));
+    try {
+      await getStore().put(key, bytes, { forbidOverwrite: true });
+      return true;
+    } catch (error) {
+      if (!objectExists(error)) throw error;
+    }
+    const existing = await readSlot(key);
+    if (!reusable(existing.item) || !existing.etag) continue;
+    try {
+      await getStore().put(key, bytes, { ifMatch: existing.etag });
+      return true;
+    } catch (error) {
+      if (!preconditionFailed(error)) throw error;
     }
   }
   return false;
