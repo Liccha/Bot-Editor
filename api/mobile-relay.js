@@ -61,10 +61,6 @@ function objectExists(error) {
   return Number(error?.status || error?.statusCode || 0) === 409
     || ['FileAlreadyExists', 'ObjectAlreadyExists'].includes(String(error?.code || ''));
 }
-function preconditionFailed(error) {
-  return Number(error?.status || error?.statusCode || 0) === 412
-    || String(error?.code || '') === 'PreconditionFailed';
-}
 async function acquireClaim(id, inboxKey) {
   const key = claimKey(id);
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -84,9 +80,9 @@ async function acquireClaim(id, inboxKey) {
 }
 async function readSlot(key) {
   const object = await getStore().get(key);
-  if (!object) return { key, item: null, etag: null };
+  if (!object) return { key, item: null };
   const value = JSON.parse(object.body.toString('utf8'));
-  return { key, item: value && typeof value === 'object' ? value : null, etag: object.etag };
+  return { key, item: value && typeof value === 'object' ? value : null };
 }
 async function readSlots(deviceId) {
   return Promise.all(Array.from({ length: DEVICE_SLOTS }, (_, index) => readSlot(slotKey(deviceId, index))));
@@ -101,25 +97,22 @@ function reusable(item) {
   return Date.parse(item.completedAt || 0) <= Date.now() - RESULT_REUSE_GRACE_MS;
 }
 async function placeInSlot(item) {
+  const bytes = Buffer.from(JSON.stringify(item));
   for (let index = 0; index < DEVICE_SLOTS; index++) {
     const key = slotKey(item.deviceId, index);
-    const bytes = Buffer.from(JSON.stringify(item));
     try {
       await getStore().put(key, bytes, { forbidOverwrite: true });
       return true;
     } catch (error) {
       if (!objectExists(error)) throw error;
     }
-    const existing = await readSlot(key);
-    if (!reusable(existing.item) || !existing.etag) continue;
-    try {
-      await getStore().put(key, bytes, { ifMatch: existing.etag });
-      return true;
-    } catch (error) {
-      if (!preconditionFailed(error)) throw error;
-    }
   }
-  return false;
+  return repo.withLock(`mobile-relay-submit-${item.deviceId}`, async () => {
+    const available = (await readSlots(item.deviceId)).find(slot => reusable(slot.item));
+    if (!available) return false;
+    await getStore().put(available.key, bytes);
+    return true;
+  });
 }
 
 async function deviceFromRequest(req) {

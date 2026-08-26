@@ -79,6 +79,12 @@ test('completed requests release their slots after the device receives the resul
     } })).status, 200);
     assert.equal((await call('GET', 'result', { headers, query: { id: submitted.body.id } })).status, 200);
   }
+  const concurrent = await Promise.all([9, 10].map(page => call('POST', 'submit', { headers, body: {
+    method: 'GET', path: '/api/songs', query: { offset: String(page * 200), limit: '200' }
+  } })));
+  assert.deepEqual(concurrent.map(result => result.status), [202, 202]);
+  const polled = await call('GET', 'desktop-poll', { headers: desktop });
+  assert.deepEqual(new Set(polled.body.items.map(item => item.id)), new Set(concurrent.map(result => result.body.id)));
 });
 
 test('empty desktop poll does not take or wait for the queue lock', async () => {
