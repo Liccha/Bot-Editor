@@ -37,6 +37,7 @@ function badRequest(message = 'invalid request') { const error = new Error(messa
 function unauthorized() { const error = new Error('not authorized'); error.statusCode = 401; return error; }
 function notFound() { const error = new Error('not found'); error.statusCode = 404; return error; }
 function conflict(message = 'conflict') { const error = new Error(message); error.statusCode = 409; return error; }
+function rateLimited() { const error = new Error('rate limited'); error.statusCode = 429; return error; }
 function hashSecret(secret) { return crypto.createHash('sha256').update(String(secret || '')).digest('hex'); }
 function safeId(value) { return /^[a-f0-9-]{36}$/.test(String(value || '')) ? String(value) : ''; }
 
@@ -163,6 +164,16 @@ module.exports = async function handler(req, res) {
       const extension = String(input.extension || '').toLowerCase();
       const allowedExtensions = type === 'image' ? ['.jpg', '.jpeg', '.png', '.webp'] : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
       if (!type || !Number.isSafeInteger(size) || size < 1 || size > limit || !allowedExtensions.includes(extension)) throw badRequest();
+      await repo.withLock('mobile-devices', async () => {
+        const document = await readDevices(); const stored = document.devices.find(item => item.id === device.id && item.status !== 'revoked');
+        if (!stored) throw unauthorized();
+        const day = now().slice(0, 10); const last = Date.parse(stored.lastAssetTicketAt || 0);
+        if (Number.isFinite(last) && Date.now() - last < 5000) throw rateLimited();
+        if (stored.assetTicketDay !== day) { stored.assetTicketDay = day; stored.assetTicketCount = 0; }
+        if (Number(stored.assetTicketCount || 0) >= 30) throw rateLimited();
+        stored.assetTicketCount = Number(stored.assetTicketCount || 0) + 1; stored.lastAssetTicketAt = now();
+        await getStore().put(DEVICES_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })));
+      });
       const key = `mobile-assets/${device.id}/${crypto.randomUUID()}${extension}`;
       const uploadUrl = await getStore().signedPutUrl(key, String(input.contentType || 'application/octet-stream'));
       return json(res, 200, { key, uploadUrl, method: 'PUT', headers: { 'Content-Type': String(input.contentType || 'application/octet-stream') } });
@@ -223,15 +234,18 @@ module.exports = async function handler(req, res) {
       await emergency.assertWriteAllowed();
       const input = body(req); const id = safeId(input.id); const claimToken = safeId(input.claimToken);
       if (!id || !claimToken) throw badRequest();
+      let completedAssetKey = '';
       await repo.withLock('mobile-relay-queue', async () => {
         const document = cleanQueue(await readQueue());
         const item = document.items.find(candidate => candidate.id === id);
         if (!item || item.state !== 'claimed' || item.claimToken !== claimToken) throw conflict();
+        if (item.payload?.path === '/api/song-asset') completedAssetKey = String(item.payload.body?.key || '');
         item.state = 'complete'; item.completedAt = now();
         item.response = { status: Math.max(100, Math.min(599, Number(input.status || 500))), body: input.body && typeof input.body === 'object' ? input.body : {} };
         delete item.claimToken; delete item.claimExpiresAt; delete item.payload;
         await getStore().put(QUEUE_KEY, Buffer.from(JSON.stringify({ ...document, updatedAt: now() })));
       });
+      if (completedAssetKey.startsWith('mobile-assets/')) await getStore().delete(completedAssetKey).catch(() => {});
       return json(res, 200, { ok: true });
     }
 
@@ -241,6 +255,7 @@ module.exports = async function handler(req, res) {
     if (status >= 500) console.error('mobile-relay', action, { name: String(error.name || 'Error'), status });
     return json(res, status >= 400 && status < 600 ? status : 500, {
       error: status === 423 ? 'cloud writes temporarily locked'
+        : status === 429 ? 'rate limited'
         : status === 401 || status === 403 ? 'not authorized'
           : status === 404 ? 'not found' : status === 409 ? 'conflict'
             : status === 400 ? 'invalid request' : 'internal'

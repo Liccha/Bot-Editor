@@ -71,6 +71,23 @@ test('relay rejects arbitrary paths and revoked accounts immediately', async () 
   assert.equal((await call('POST', 'submit', { headers, body: { method: 'GET', path: '/api/status' } })).status, 401);
 });
 
+test('asset tickets are scoped to the device and rate limited', async () => {
+  const registered = await call('POST', 'register-device', { headers: desktop, body: { name: '资源上传设备' } });
+  const headers = { authorization: `Device ${registered.body.token}` };
+  const ticket = await call('POST', 'asset-ticket', { headers, body: {
+    type: 'image', size: 1024, extension: '.png', contentType: 'image/png'
+  } });
+  assert.equal(ticket.status, 200);
+  assert.match(ticket.body.key, new RegExp(`^mobile-assets/${registered.body.id}/`));
+  assert.equal((await call('POST', 'asset-ticket', { headers, body: {
+    type: 'image', size: 1024, extension: '.png', contentType: 'image/png'
+  } })).status, 429);
+  const other = await call('POST', 'register-device', { headers: desktop, body: { name: '其他资源设备' } });
+  assert.equal((await call('POST', 'submit', { headers: { authorization: `Device ${other.body.token}` }, body: {
+    method: 'POST', path: '/api/song-asset', body: { id: '1', type: 'image', key: ticket.body.key }
+  } })).status, 400);
+});
+
 test('emergency lock blocks device creation and queued operations', async () => {
   const registered = await call('POST', 'register-device', { headers: desktop, body: { name: '锁定测试' } });
   process.env.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK = '1';
