@@ -59,7 +59,7 @@ const manifest = {
   sha256: setupHash,
   size: setupSize,
   publishedAt: new Date().toISOString(),
-  notes: '电脑在线状态改为轻量心跳并即时同步每日歌曲与竞猜开关；修复手机刷新等待远程命令队列的问题。',
+  notes: '新增开机登录后常驻的后台代理：即使工作站界面已关闭，仍可执行手机端刷新和 SongBot/NapCat 开关，并将手机修改同步到本地数据库与 CSV。',
   backup: {
     url: `${publicBase}/${standaloneKey}`,
     sha256: standaloneHash,

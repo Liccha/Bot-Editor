@@ -61,7 +61,7 @@ const manifest = {
   sha256: hash,
   size,
   publishedAt: new Date().toISOString(),
-  notes: '在线检测改为秒级心跳，不再等待远程命令队列；新增每日歌曲与竞猜开关，并优化歌曲难度编辑标签。',
+  notes: '手机修改歌曲信息后自动同步至 Bot 本地数据库与 CSV；SongBot、NapCat 刷新和开关改由 Windows 常驻后台代理执行，无需保持 PC 工作站界面打开。',
 };
 
 await client.put(apkKey, apk, {
