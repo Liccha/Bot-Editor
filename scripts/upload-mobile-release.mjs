@@ -61,7 +61,7 @@ const manifest = {
   sha256: hash,
   size,
   publishedAt: new Date().toISOString(),
-  notes: '首次配对后改为云端独立账号，电脑关闭、切换 Wi-Fi 或移动网络仍可查询和编辑；更新包改为应用内下载、SHA-256 校验后安装。',
+  notes: '恢复运行总览中的 SongBot 与 NapCat 开关；云端数据仍可在电脑关闭、切换 Wi-Fi 或移动网络时独立使用，电脑在线时可从 App 远程控制本机服务。',
 };
 
 await client.put(apkKey, apk, {
