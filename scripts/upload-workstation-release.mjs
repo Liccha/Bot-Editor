@@ -59,7 +59,7 @@ const manifest = {
   sha256: setupHash,
   size: setupSize,
   publishedAt: new Date().toISOString(),
-  notes: '手机端首次局域网配对后可跨网络长期使用；歌曲编辑同步保存 CSV 与数据库；支持完整字段、图片和音频上传；优化 Stable 日期和运营页布局。',
+  notes: '恢复运行总览中的 SongBot 与 NapCat 开关；补齐单文件 EXE 的文件与产品版本信息，并保留跨网络云端命令中继。',
   backup: {
     url: `${publicBase}/${standaloneKey}`,
     sha256: standaloneHash,
@@ -73,15 +73,14 @@ const binaryHeaders = {
 };
 await client.put(setupKey, setup, { headers: binaryHeaders });
 await client.put(standaloneKey, standalone, { headers: binaryHeaders });
-await client.put(latestKey, Buffer.from(JSON.stringify(manifest, null, 2)), {
-  headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store, max-age=0' },
-});
-
 for (const [key, expected] of [[setupKey, setupSize], [standaloneKey, standaloneSize]]) {
   const head = await client.head(key);
   const actual = Number(head.res.headers['content-length'] || 0);
   if (actual !== expected) throw new Error(`Remote size verification failed: ${key}`);
 }
+await client.put(latestKey, Buffer.from(JSON.stringify(manifest, null, 2)), {
+  headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store, max-age=0' },
+});
 const remoteManifest = JSON.parse((await client.get(latestKey)).content.toString('utf8'));
 if (remoteManifest.sha256 !== manifest.sha256 || remoteManifest.version !== version) {
   throw new Error('Remote manifest verification failed');

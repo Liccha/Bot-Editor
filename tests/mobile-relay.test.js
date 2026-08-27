@@ -41,6 +41,37 @@ test('pairing creates a revocable hidden device account without storing its secr
   assert.equal(Object.hasOwn(listed.body.items[0], 'secretHash'), false);
 });
 
+test('desktop heartbeat provides sub-second presence and carries the daily automation switch', async () => {
+  const registered = await call('POST', 'register-device', { headers: desktop, body: { name: '状态设备' } });
+  const deviceHeaders = { authorization: `Device ${registered.body.token}` };
+  const heartbeat = await call('POST', 'desktop-heartbeat', {
+    headers: { ...desktop, 'x-admin-device': 'test-workstation' },
+    body: { songBot: 'running', napCat: 'stopped', dailyAutomation: false }
+  });
+  assert.equal(heartbeat.status, 200);
+  const started = Date.now();
+  const presence = await call('GET', 'presence', { headers: deviceHeaders });
+  assert.ok(Date.now() - started < 1_000, 'presence lookup exceeded one second');
+  assert.deepEqual({
+    online: presence.body.workstationOnline,
+    songBot: presence.body.songBot,
+    napCat: presence.body.napCat,
+    dailyAutomation: presence.body.dailyAutomation,
+  }, { online: true, songBot: 'running', napCat: 'stopped', dailyAutomation: false });
+
+  const submitted = await call('POST', 'submit', { headers: deviceHeaders, body: {
+    method: 'POST', path: '/api/action', body: { action: 'daily.automation.enable' }
+  } });
+  assert.equal(submitted.status, 202);
+  const polled = await call('GET', 'desktop-poll', { headers: desktop });
+  const work = polled.body.items.find(item => item.id === submitted.body.id);
+  assert.ok(work, 'daily automation command should be available to the workstation');
+  assert.equal((await call('POST', 'desktop-complete', { headers: desktop, body: {
+    id: work.id, claimToken: work.claimToken, status: 200, body: { ok: true }
+  } })).status, 200);
+  assert.equal((await call('GET', 'result', { headers: deviceHeaders, query: { id: submitted.body.id } })).status, 200);
+});
+
 test('device request crosses networks, is executed once, and returns only to its account', async () => {
   const registered = await call('POST', 'register-device', { headers: desktop, body: { name: '跨网设备' } });
   const deviceHeaders = { authorization: `Device ${registered.body.token}` };

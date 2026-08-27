@@ -61,7 +61,7 @@ const manifest = {
   sha256: hash,
   size,
   publishedAt: new Date().toISOString(),
-  notes: '恢复运行总览中的 SongBot 与 NapCat 开关；云端数据仍可在电脑关闭、切换 Wi-Fi 或移动网络时独立使用，电脑在线时可从 App 远程控制本机服务。',
+  notes: '在线检测改为秒级心跳，不再等待远程命令队列；新增每日歌曲与竞猜开关，并优化歌曲难度编辑标签。',
 };
 
 await client.put(apkKey, apk, {
@@ -70,12 +70,11 @@ await client.put(apkKey, apk, {
     'Cache-Control': 'public, max-age=31536000, immutable',
   },
 });
+const head = await client.head(apkKey);
+if (Number(head.res.headers['content-length'] || 0) !== size) throw new Error(`Remote size verification failed: ${apkKey}`);
 await client.put(latestKey, Buffer.from(JSON.stringify(manifest, null, 2)), {
   headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store, max-age=0' },
 });
-
-const head = await client.head(apkKey);
-if (Number(head.res.headers['content-length'] || 0) !== size) throw new Error(`Remote size verification failed: ${apkKey}`);
 const remoteManifest = JSON.parse((await client.get(latestKey)).content.toString('utf8'));
 if (remoteManifest.version !== version || remoteManifest.sha256 !== hash || remoteManifest.url !== manifest.url) {
   throw new Error('Remote mobile manifest verification failed');
