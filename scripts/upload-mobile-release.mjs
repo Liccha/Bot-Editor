@@ -5,7 +5,11 @@ import { fileURLToPath } from 'node:url';
 import OSS from 'ali-oss';
 
 const deployDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const songBotDir = path.resolve(deployDir, '..');
+const parentDir = path.resolve(deployDir, '..');
+const credentialCandidates = [
+  path.join(parentDir, 'data', 'cloud-library.credentials.properties'),
+  path.join(parentDir, 'SongBot', 'data', 'cloud-library.credentials.properties'),
+];
 
 function pairs(file) {
   const result = {};
@@ -30,7 +34,9 @@ if (!/^\d+(?:\.\d+){1,3}$/.test(version || '')) throw new Error('Version must be
 const apk = path.resolve(required(apkArg, 'APK path'));
 if (!fs.statSync(apk).isFile() || path.extname(apk).toLowerCase() !== '.apk') throw new Error(`Not an APK: ${apk}`);
 
-const cfg = pairs(path.join(songBotDir, 'data', 'cloud-library.credentials.properties'));
+const credentialFile = credentialCandidates.find(file => fs.existsSync(file));
+if (!credentialFile) throw new Error('Cloud library credential file was not found beside the deployment checkout');
+const cfg = pairs(credentialFile);
 const publicBase = (cfg.ALI_LIBRARY_PUBLIC_BASE || 'https://assets.teacharm.moe').replace(/\/$/, '');
 if (publicBase !== 'https://assets.teacharm.moe') throw new Error('Unexpected public release origin');
 const configuredRegion = required(cfg.ALI_OSS_REGION, 'ALI_OSS_REGION');
