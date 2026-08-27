@@ -59,7 +59,7 @@ const manifest = {
   sha256: setupHash,
   size: setupSize,
   publishedAt: new Date().toISOString(),
-  notes: '恢复运行总览中的 SongBot 与 NapCat 开关；补齐单文件 EXE 的文件与产品版本信息，并保留跨网络云端命令中继。',
+  notes: '电脑在线状态改为轻量心跳并即时同步每日歌曲与竞猜开关；修复手机刷新等待远程命令队列的问题。',
   backup: {
     url: `${publicBase}/${standaloneKey}`,
     sha256: standaloneHash,
