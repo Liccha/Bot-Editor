@@ -54,9 +54,9 @@ module.exports = async function handler(req, res) {
       const input = body(req);
       const type = input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
       const size = Number(input.size || 0);
-      const limit = type === 'image' ? 2 * 1024 * 1024 : 40 * 1024 * 1024;
+      const limit = type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024;
       const extension = String(input.extension || '').toLowerCase();
-      const allowed = type === 'image' ? ['.jpg', '.jpeg', '.png', '.webp'] : ['.mp3'];
+      const allowed = type === 'image' ? ['.jpg', '.jpeg', '.png', '.webp'] : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
       if (!device || !type || !Number.isSafeInteger(size) || size < 1 || size > limit || !allowed.includes(extension)) badRequest();
       const key = `mobile-library/uploads/${device.id}/${require('node:crypto').randomUUID()}${extension}`;
       const uploadUrl = await getStore().signedPutUrl(key, String(input.contentType || 'application/octet-stream'));
@@ -71,9 +71,10 @@ module.exports = async function handler(req, res) {
       const source = String(input.key || '');
       if (!/^[0-9]{1,12}$/.test(id) || !type || !source.startsWith(`mobile-library/uploads/${device.id}/`)) badRequest();
       const head = await getStore().head(source);
-      if (!head || head.size < 1 || head.size > (type === 'image' ? 2 * 1024 * 1024 : 40 * 1024 * 1024)) badRequest();
+      if (!head || head.size < 1 || head.size > (type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024)) badRequest();
       const extension = source.slice(source.lastIndexOf('.')).toLowerCase();
-      if (type === 'image' ? !['.jpg', '.jpeg', '.png', '.webp'].includes(extension) : extension !== '.mp3') badRequest();
+      if (type === 'image' ? !['.jpg', '.jpeg', '.png', '.webp'].includes(extension)
+        : !['.mp3', '.wav', '.flac', '.m4a', '.ogg'].includes(extension)) badRequest();
       const target = `mobile-library/assets/${type}/${id}/${require('node:crypto').randomUUID()}${extension}`;
       await getStore().copy(source, target);
       const result = await library.update('songs', id, {

@@ -55,7 +55,7 @@ const manifest = {
   sha256: hash,
   size,
   publishedAt: new Date().toISOString(),
-  notes: '首次配对后支持跨网络长期登录；完整加载歌曲与 Stable 分页；补齐全部昵称、难度字段和资源上传；刷新按钮增加明确动效与反馈。',
+  notes: '首次配对后改为云端独立账号，电脑关闭、切换 Wi-Fi 或移动网络仍可查询和编辑；更新包改为应用内下载、SHA-256 校验后安装。',
 };
 
 await client.put(apkKey, apk, {
