@@ -152,8 +152,27 @@ test('idle desktop polls do not repeatedly download completed response bodies', 
     `idle polling re-downloaded ${completedResponseBytes} bytes of an already completed response`);
 });
 
+test('first compact-index initialization never scans legacy device slots', async () => {
+  const store = getStore();
+  await store.delete('mobile-relay/pending.json');
+  const originalGet = store.get.bind(store);
+  let inboxReads = 0;
+  store.get = async key => {
+    if (String(key).startsWith('mobile-relay/inboxes/')) inboxReads++;
+    return originalGet(key);
+  };
+  try {
+    const polled = await call('GET', 'desktop-poll', { headers: desktop });
+    assert.equal(polled.status, 200);
+    assert.deepEqual(polled.body.items, []);
+  } finally {
+    store.get = originalGet;
+  }
+  assert.equal(inboxReads, 0, `compact-index initialization scanned ${inboxReads} legacy slots`);
+});
+
 test('empty desktop poll does not take or wait for the queue lock', async () => {
-  const lockKey = 'locks/mobile-relay-queue.json';
+  const lockKey = 'locks/mobile-relay-pending.json';
   await getStore().put(lockKey, Buffer.from(JSON.stringify({
     token: crypto.randomUUID(), expiresAt: new Date(Date.now() + 30_000).toISOString()
   })));

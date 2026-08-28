@@ -157,20 +157,7 @@ async function initializePending() {
   return repo.withLock('mobile-relay-pending', async () => {
     const pending = await readPending();
     if (pending.initialized) return pending;
-    const devices = (await readDevices()).devices.filter(device => device.status !== 'revoked');
-    const slots = (await Promise.all(devices.map(device => readSlots(device.id)))).flat();
-    const known = new Map(pending.items.map(item => [item.id, item]));
-    for (const { key, item } of slots) {
-      if (!item || !safeId(item.id) || expired(item) || item.state === 'complete') continue;
-      known.set(item.id, {
-        id: item.id,
-        deviceId: item.deviceId,
-        inboxKey: key,
-        nextAttemptAt: item.state === 'claimed' ? item.claimExpiresAt || null : null
-      });
-    }
     pending.initialized = true;
-    pending.items = [...known.values()].slice(0, MAX_DEVICES * DEVICE_SLOTS);
     await getStore().put(PENDING_KEY, Buffer.from(JSON.stringify(pending)));
     return pending;
   });
