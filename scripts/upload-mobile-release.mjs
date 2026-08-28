@@ -61,7 +61,7 @@ const manifest = {
   sha256: hash,
   size,
   publishedAt: new Date().toISOString(),
-  notes: '修复歌曲编辑页首个字段标签被裁切；难度字段恢复显示原始 ez、nm、hd、mx、sp 名称，不再翻译。',
+  notes: '歌曲列表改为首屏 100 首、触底再加载 100 首；已校验的同版本更新包可直接复用，避免重复下载。',
 };
 
 await client.put(apkKey, apk, {
