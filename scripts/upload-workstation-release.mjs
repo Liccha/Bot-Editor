@@ -25,7 +25,7 @@ function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
-const [version, setupArg, standaloneArg] = process.argv.slice(2);
+const [version, setupArg, standaloneArg, notesArg] = process.argv.slice(2);
 if (!/^\d+(?:\.\d+){1,3}$/.test(version || '')) throw new Error('Version must be numeric, for example 1.1.0');
 const setup = path.resolve(required(setupArg, 'setup path'));
 const standalone = path.resolve(required(standaloneArg, 'standalone path'));
@@ -59,7 +59,7 @@ const manifest = {
   sha256: setupHash,
   size: setupSize,
   publishedAt: new Date().toISOString(),
-  notes: '歌曲编辑器的谱面难度字段统一保留数据库原始 ez、nm、hd、mx、sp 名称，禁止自动翻译。',
+  notes: notesArg || '修复 SongBot 在工作站更新后文本查询依赖失效的问题；编号、歌名、作者、谱师及全部别名查询保持原有逻辑。',
   backup: {
     url: `${publicBase}/${standaloneKey}`,
     sha256: standaloneHash,
