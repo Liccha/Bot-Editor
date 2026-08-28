@@ -59,7 +59,7 @@ const manifest = {
   sha256: setupHash,
   size: setupSize,
   publishedAt: new Date().toISOString(),
-  notes: '新增开机登录后常驻的后台代理：即使工作站界面已关闭，仍可执行手机端刷新和 SongBot/NapCat 开关，并将手机修改同步到本地数据库与 CSV。',
+  notes: '歌曲编辑器的谱面难度字段统一保留数据库原始 ez、nm、hd、mx、sp 名称，禁止自动翻译。',
   backup: {
     url: `${publicBase}/${standaloneKey}`,
     sha256: standaloneHash,

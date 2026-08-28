@@ -61,7 +61,7 @@ const manifest = {
   sha256: hash,
   size,
   publishedAt: new Date().toISOString(),
-  notes: '手机修改歌曲信息后自动同步至 Bot 本地数据库与 CSV；SongBot、NapCat 刷新和开关改由 Windows 常驻后台代理执行，无需保持 PC 工作站界面打开。',
+  notes: '修复歌曲编辑页首个字段标签被裁切；难度字段恢复显示原始 ez、nm、hd、mx、sp 名称，不再翻译。',
 };
 
 await client.put(apkKey, apk, {
