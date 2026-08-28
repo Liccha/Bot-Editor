@@ -61,7 +61,7 @@ const manifest = {
   sha256: hash,
   size,
   publishedAt: new Date().toISOString(),
-  notes: '歌曲列表改为首屏 100 首、触底再加载 100 首；已校验的同版本更新包可直接复用，避免重复下载。',
+  notes: '底部导航已调整为“总览、茶韵谱面、Stable谱面、更多”；页面路由和功能保持不变。',
 };
 
 await client.put(apkKey, apk, {
