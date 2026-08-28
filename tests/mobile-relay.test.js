@@ -118,6 +118,40 @@ test('completed requests release their slots after the device receives the resul
   assert.deepEqual(new Set(polled.body.items.map(item => item.id)), new Set(concurrent.map(result => result.body.id)));
 });
 
+test('idle desktop polls do not repeatedly download completed response bodies', async () => {
+  const registered = await call('POST', 'register-device', { headers: desktop, body: { name: '流量回归设备' } });
+  const key = `mobile-relay/inboxes/${registered.body.id}/0.json`;
+  await getStore().put(key, Buffer.from(JSON.stringify({
+    id: crypto.randomUUID(),
+    deviceId: registered.body.id,
+    state: 'complete',
+    completedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    response: { status: 200, body: { padding: 'x'.repeat(512 * 1024) } }
+  })));
+
+  const store = getStore();
+  const originalGet = store.get.bind(store);
+  let completedResponseBytes = 0;
+  store.get = async candidate => {
+    const result = await originalGet(candidate);
+    if (candidate === key && result) completedResponseBytes += result.body.length;
+    return result;
+  };
+  try {
+    for (let index = 0; index < 5; index++) {
+      const polled = await call('GET', 'desktop-poll', { headers: desktop });
+      assert.equal(polled.status, 200);
+      assert.deepEqual(polled.body.items, []);
+    }
+  } finally {
+    store.get = originalGet;
+    await store.delete(key);
+  }
+  assert.ok(completedResponseBytes < 64 * 1024,
+    `idle polling re-downloaded ${completedResponseBytes} bytes of an already completed response`);
+});
+
 test('empty desktop poll does not take or wait for the queue lock', async () => {
   const lockKey = 'locks/mobile-relay-queue.json';
   await getStore().put(lockKey, Buffer.from(JSON.stringify({
