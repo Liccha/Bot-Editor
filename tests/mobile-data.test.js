@@ -115,3 +115,36 @@ test('an unchanged desktop change cursor never downloads the full library snapsh
   assert.equal(snapshotReads, 0,
     `idle synchronization downloaded the full snapshot ${snapshotReads} times (${snapshotBytes} bytes)`);
 });
+
+test('repeated cloud status checks never download full library snapshots', async () => {
+  const store = getStore();
+  const libraryModule = require.resolve('../api/_lib/mobile-library');
+  delete require.cache[libraryModule];
+  const coldLibrary = require('../api/_lib/mobile-library');
+  const snapshotKeys = new Set([
+    'mobile-library/songs/current.json',
+    'mobile-library/stable/current.json'
+  ]);
+  const originalGet = store.get.bind(store);
+  let snapshotReads = 0;
+  let snapshotBytes = 0;
+  store.get = async key => {
+    const result = await originalGet(key);
+    if (snapshotKeys.has(key) && result) {
+      snapshotReads++;
+      snapshotBytes += result.body.length;
+    }
+    return result;
+  };
+  try {
+    for (let index = 0; index < 5; index++) {
+      const response = await coldLibrary.status();
+      assert.equal(response.songs.total, 2);
+      assert.equal(response.stable.total, 1);
+    }
+  } finally {
+    store.get = originalGet;
+  }
+  assert.equal(snapshotReads, 0,
+    `status checks downloaded snapshots ${snapshotReads} times (${snapshotBytes} bytes)`);
+});

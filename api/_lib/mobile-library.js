@@ -14,11 +14,13 @@ function error(statusCode, message) { const value = new Error(message); value.st
 function spec(name) { const value = DATASETS[name]; if (!value) throw error(400, 'invalid dataset'); return value; }
 function revisionKey(dataset) { spec(dataset); return `mobile-library/${dataset}/revision.json`; }
 function revisionMarker(dataset, document) {
+  const total = Array.isArray(document?.items) ? document.items.length : Number(document?.total);
   return {
     schema: 1,
     dataset,
     revision: Math.max(0, Number(document?.revision || 0)),
-    updatedAt: String(document?.updatedAt || now())
+    updatedAt: String(document?.updatedAt || now()),
+    total: Number.isSafeInteger(total) && total >= 0 ? total : null
   };
 }
 async function writeRevisionMarker(dataset, document) {
@@ -233,10 +235,18 @@ async function changes(dataset, requestedAfter, requestedLimit) {
 }
 
 async function status() {
-  const [songs, stable] = await Promise.all([read('songs'), read('stable')]);
+  const marker = async dataset => {
+    const current = await readRevisionMarker(dataset);
+    if (current && Number.isSafeInteger(current.total) && current.total >= 0) return current;
+    // One-time migration for markers written before totals were included. All
+    // later status checks stay on the tiny marker instead of the full snapshot.
+    const document = await read(dataset, { fresh: true });
+    return document ? writeRevisionMarker(dataset, document) : null;
+  };
+  const [songs, stable] = await Promise.all([marker('songs'), marker('stable')]);
   return { ok: true, cloudIndependent: true,
-    songs: songs ? { total: songs.items.length, revision: songs.revision, updatedAt: songs.updatedAt } : null,
-    stable: stable ? { total: stable.items.length, revision: stable.revision, updatedAt: stable.updatedAt } : null };
+    songs: songs ? { total: songs.total, revision: songs.revision, updatedAt: songs.updatedAt } : null,
+    stable: stable ? { total: stable.total, revision: stable.revision, updatedAt: stable.updatedAt } : null };
 }
 
 module.exports = { bootstrap, changes, list, read, status, update };
