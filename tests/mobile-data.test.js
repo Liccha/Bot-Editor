@@ -148,3 +148,37 @@ test('repeated cloud status checks never download full library snapshots', async
   assert.equal(snapshotReads, 0,
     `status checks downloaded snapshots ${snapshotReads} times (${snapshotBytes} bytes)`);
 });
+
+test('cold library reads migrate to and prefer a compact gzip snapshot', async () => {
+  const store = getStore();
+  const rawKey = 'mobile-library/songs/current.json';
+  const compactKey = 'mobile-library/songs/current.json.gz';
+  await store.delete(compactKey);
+
+  const libraryModule = require.resolve('../api/_lib/mobile-library');
+  delete require.cache[libraryModule];
+  const migratingLibrary = require('../api/_lib/mobile-library');
+  const first = await migratingLibrary.list('songs', '', 0, 100);
+  assert.equal(first.total, 2);
+  const raw = await store.get(rawKey);
+  const compact = await store.get(compactKey);
+  assert.ok(compact, 'first legacy read should create the compact snapshot');
+  assert.ok(compact.body.length < raw.body.length,
+    `compact snapshot is not smaller (${compact.body.length} >= ${raw.body.length})`);
+
+  delete require.cache[libraryModule];
+  const coldLibrary = require('../api/_lib/mobile-library');
+  const originalGet = store.get.bind(store);
+  let rawReads = 0;
+  store.get = async key => {
+    if (key === rawKey) rawReads++;
+    return originalGet(key);
+  };
+  try {
+    const second = await coldLibrary.list('songs', '离线电脑', 0, 100);
+    assert.equal(second.total, 1);
+  } finally {
+    store.get = originalGet;
+  }
+  assert.equal(rawReads, 0, 'cold reads must not download the legacy full snapshot');
+});

@@ -1,12 +1,14 @@
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 const { getStore } = require('./storage');
 const repo = require('./repository');
 
 const DATASETS = {
-  songs: { key: 'mobile-library/songs/current.json', id: 'id', maxItems: 5000 },
-  stable: { key: 'mobile-library/stable/current.json', id: 'sid', maxItems: 5000 }
+  songs: { key: 'mobile-library/songs/current.json', compactKey: 'mobile-library/songs/current.json.gz', id: 'id', maxItems: 5000 },
+  stable: { key: 'mobile-library/stable/current.json', compactKey: 'mobile-library/stable/current.json.gz', id: 'sid', maxItems: 5000 }
 };
 const MAX_CHANGE_LOG = 4000;
+const MAX_DOCUMENT_BYTES = 32 * 1024 * 1024;
 const caches = new Map();
 
 function now() { return new Date().toISOString(); }
@@ -72,13 +74,43 @@ function cleanItems(value, columns, dataset) {
   });
 }
 
+function gzip(body) { return zlib.gzipSync(body, { level: 9 }); }
+function gunzip(body) { return zlib.gunzipSync(body, { maxOutputLength: MAX_DOCUMENT_BYTES }); }
+async function readStoredDocument(definition) {
+  const store = getStore();
+  const compact = await store.get(definition.compactKey);
+  if (compact) {
+    try { return JSON.parse(gunzip(compact.body).toString('utf8')); }
+    catch (_) {
+      // A damaged derived copy must never make the authoritative legacy
+      // snapshot unreadable. It is repaired below from current.json.
+    }
+  }
+  const legacy = await store.get(definition.key);
+  if (!legacy) return null;
+  if (legacy.body.length > MAX_DOCUMENT_BYTES) throw new Error('cloud library document is too large');
+  const document = JSON.parse(legacy.body.toString('utf8'));
+  const compactBody = gzip(legacy.body);
+  try {
+    await store.put(definition.compactKey, compactBody, compact ? {} : { ifNoneMatch: true });
+  } catch (error) {
+    if (!['PreconditionFailed', 'FileAlreadyExists', 'ObjectAlreadyExists'].includes(String(error?.code || ''))
+      && Number(error?.status || error?.statusCode || 0) !== 409) throw error;
+  }
+  return document;
+}
+async function writeCurrentSnapshots(definition, bytes, options = {}) {
+  const store = getStore();
+  await store.put(definition.key, bytes, options);
+  await store.put(definition.compactKey, gzip(bytes), options);
+}
+
 async function read(dataset, options = {}) {
   const definition = spec(dataset);
   const cached = caches.get(dataset);
   if (!options.fresh && cached && Date.now() - cached.at < 15_000) return clone(cached.document);
-  const object = await getStore().get(definition.key);
-  if (!object) return null;
-  const document = JSON.parse(object.body.toString('utf8'));
+  const document = await readStoredDocument(definition);
+  if (!document) return null;
   if (!Array.isArray(document.columns) || !Array.isArray(document.items)) throw new Error('cloud library document is invalid');
   caches.set(dataset, { at: Date.now(), document });
   return clone(document);
@@ -95,7 +127,7 @@ async function bootstrap(dataset, raw, actor) {
     const document = { schema: 2, dataset, revision: 1, columns, items, changes: [], updatedAt: now() };
     const bytes = Buffer.from(JSON.stringify(document));
     await getStore().put(`mobile-library/${dataset}/baseline-1.json`, bytes, { forbidOverwrite: true });
-    await getStore().put(definition.key, bytes, { forbidOverwrite: true });
+    await writeCurrentSnapshots(definition, bytes, { forbidOverwrite: true });
     await writeRevisionMarker(dataset, document);
     caches.set(dataset, { at: Date.now(), document });
     await repo.writeAudit({ event: 'MOBILE_LIBRARY_BOOTSTRAPPED', actor, dataset, rows: items.length });
@@ -187,8 +219,9 @@ async function update(dataset, rawId, rawValues, actor) {
     }
     document.schema = 2;
     const stamp = String(document.revision).padStart(12, '0');
+    const bytes = Buffer.from(JSON.stringify(document));
     await getStore().put(`mobile-library/${dataset}/changes/${stamp}-${crypto.randomUUID()}.json`, Buffer.from(JSON.stringify(change)), { forbidOverwrite: true });
-    await getStore().put(definition.key, Buffer.from(JSON.stringify(document)));
+    await writeCurrentSnapshots(definition, bytes);
     await writeRevisionMarker(dataset, document);
     caches.set(dataset, { at: Date.now(), document });
     await repo.writeAudit({ event: dataset === 'songs' ? 'MOBILE_SONG_UPDATED' : 'MOBILE_STABLE_UPDATED', actor, id, values, revision: document.revision });
