@@ -1,26 +1,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { AsyncLocalStorage } = require('node:async_hooks');
 const OSS = require('ali-oss');
 const { config } = require('./config');
-
-const storageMetrics = new AsyncLocalStorage();
-
-function recordRead(body) {
-  const metrics = storageMetrics.getStore();
-  if (!metrics) return;
-  metrics.gets += 1;
-  metrics.bytes += Buffer.isBuffer(body) ? body.length : Buffer.byteLength(body || '');
-}
-
-function withStorageMetrics(operation) {
-  return storageMetrics.run({ gets: 0, bytes: 0 }, operation);
-}
-
-function currentStorageMetrics() {
-  return storageMetrics.getStore() || { gets: 0, bytes: 0 };
-}
 
 class LocalStore {
   constructor(root) { this.root = root; }
@@ -33,7 +15,6 @@ class LocalStore {
     try {
       const file = this.resolve(key);
       const body = await fs.readFile(file);
-      recordRead(body);
       return { body, etag: crypto.createHash('sha256').update(body).digest('hex') };
     } catch (error) {
       if (error.code === 'ENOENT') return null;
@@ -94,9 +75,7 @@ class OssStore {
   async get(key) {
     try {
       const result = await this.client.get(key);
-      const body = Buffer.from(result.content);
-      recordRead(body);
-      return { body, etag: cleanEtag(result.res.headers.etag) };
+      return { body: Buffer.from(result.content), etag: cleanEtag(result.res.headers.etag) };
     } catch (error) {
       if (error.status === 404 || error.code === 'NoSuchKey') return null;
       throw error;
@@ -137,7 +116,4 @@ function getStore() {
   return singleton;
 }
 
-module.exports = {
-  LocalStore, OssStore, getStore, cleanEtag, quoteEtag,
-  withStorageMetrics, currentStorageMetrics
-};
+module.exports = { LocalStore, OssStore, getStore, cleanEtag, quoteEtag };

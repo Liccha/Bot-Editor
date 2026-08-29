@@ -1,4 +1,4 @@
-const { getStore, withStorageMetrics, currentStorageMetrics } = require('./_lib/storage');
+const { getStore } = require('./_lib/storage');
 const security = require('./_lib/security');
 const emergency = require('./_lib/emergency-lock');
 const mobileAuth = require('./_lib/mobile-auth');
@@ -10,9 +10,6 @@ function json(res, status, value) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  const metrics = currentStorageMetrics();
-  res.setHeader('X-OSS-Read-Count', String(metrics.gets));
-  res.setHeader('X-OSS-Read-Bytes', String(metrics.bytes));
   res.end(JSON.stringify(value));
 }
 function body(req) {
@@ -24,7 +21,7 @@ function query(req, key) { const value = req.query?.[key]; return Array.isArray(
 function badRequest() { const error = new Error(); error.statusCode = 400; throw error; }
 function unauthorized() { const error = new Error(); error.statusCode = 401; throw error; }
 
-async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const action = String(query(req, 'action') || 'status');
   try {
     const desktop = security.desktopAuthorized(req);
@@ -103,8 +100,4 @@ async function handler(req, res) {
             : status === 400 ? 'invalid request' : status === 503 ? 'cloud data not initialized' : 'internal'
     });
   }
-}
-
-module.exports = function measuredHandler(req, res) {
-  return withStorageMetrics(() => handler(req, res));
 };
