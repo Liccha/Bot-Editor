@@ -84,6 +84,54 @@ test('revocation and emergency write lock apply to direct cloud data', async () 
   assert.equal((await call(data, 'GET', 'songs', { headers })).status, 401);
 });
 
+test('self-enrolled workstation editor can edit library data but cannot use the control relay', async () => {
+  const installationId = crypto.randomUUID();
+  const secret = crypto.randomBytes(32).toString('base64url');
+  const enrolled = await call(data, 'POST', 'enroll-editor', {
+    headers: { 'x-vercel-forwarded-for': '198.51.100.77' },
+    body: { installationId, secret, name: '外部工作站' }
+  });
+  assert.equal(enrolled.status, 201);
+  assert.equal(enrolled.body.scope, 'library-editor');
+  assert.equal(enrolled.body.token.endsWith(`.${secret}`), true);
+  const stored = (await getStore().get('security/library-editors.json')).body.toString('utf8');
+  assert.doesNotMatch(stored, new RegExp(secret));
+
+  const headers = { authorization: `Device ${enrolled.body.token}` };
+  const listed = await call(data, 'GET', 'songs', { headers, query: { q: '第一', limit: '200' } });
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.items[0].id, '1');
+  const updated = await call(data, 'POST', 'song', {
+    headers,
+    body: { id: '1', values: { song_name: '外部工作站修改' } }
+  });
+  assert.equal(updated.status, 200);
+  const relayAttempt = await call(relay, 'GET', 'presence', { headers });
+  assert.equal(relayAttempt.status, 401, 'library-only installation must not control SongBot or NapCat');
+});
+
+test('self enrollment is idempotent for one installation secret and emergency lock still blocks it', async () => {
+  const installationId = crypto.randomUUID();
+  const secret = crypto.randomBytes(32).toString('base64url');
+  const request = {
+    headers: { 'x-vercel-forwarded-for': '198.51.100.88' },
+    body: { installationId, secret, name: '重复安装' }
+  };
+  const first = await call(data, 'POST', 'enroll-editor', request);
+  const second = await call(data, 'POST', 'enroll-editor', request);
+  assert.equal(first.status, 201);
+  assert.equal(second.status, 201);
+  assert.equal(first.body.id, second.body.id);
+  process.env.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK = '1';
+  try {
+    const blocked = await call(data, 'POST', 'song', {
+      headers: { authorization: `Device ${first.body.token}` },
+      body: { id: '1', values: { song_name: '不应写入' } }
+    });
+    assert.equal(blocked.status, 423);
+  } finally { delete process.env.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK; }
+});
+
 test('an unchanged desktop change cursor never downloads the full library snapshot', async () => {
   const store = getStore();
   const currentKey = 'mobile-library/songs/current.json';

@@ -2,6 +2,7 @@ const { getStore } = require('./_lib/storage');
 const security = require('./_lib/security');
 const emergency = require('./_lib/emergency-lock');
 const mobileAuth = require('./_lib/mobile-auth');
+const editorAuth = require('./_lib/library-editor-auth');
 const library = require('./_lib/mobile-library');
 
 function json(res, status, value) {
@@ -24,10 +25,17 @@ function unauthorized() { const error = new Error(); error.statusCode = 401; thr
 module.exports = async function handler(req, res) {
   const action = String(query(req, 'action') || 'status');
   try {
+    if (action === 'enroll-editor' && req.method === 'POST') {
+      await emergency.assertWriteAllowed();
+      return json(res, 201, await editorAuth.enroll(req, body(req)));
+    }
     const desktop = security.desktopAuthorized(req);
     const device = desktop ? null : await mobileAuth.deviceFromRequest(req);
-    if (!desktop && !device) throw unauthorized();
-    const actor = desktop ? { kind: 'workstation' } : { kind: 'mobile-device', id: device.id };
+    const editor = desktop || device ? null : await editorAuth.editorFromRequest(req);
+    if (!desktop && !device && !editor) throw unauthorized();
+    const actor = desktop ? { kind: 'workstation' }
+      : device ? { kind: 'mobile-device', id: device.id }
+        : { kind: 'library-editor', id: editor.id };
 
     if (action === 'status' && req.method === 'GET') {
       const policy = await emergency.state();
@@ -44,6 +52,7 @@ module.exports = async function handler(req, res) {
     }
     if ((action === 'song' || action === 'stable') && req.method === 'POST') {
       await emergency.assertWriteAllowed();
+      if (editor) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
       const dataset = action === 'song' ? 'songs' : 'stable';
       const id = action === 'song' ? input.id : input.sid;
@@ -57,25 +66,28 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'asset-ticket' && req.method === 'POST') {
       await emergency.assertWriteAllowed();
+      if (editor) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
       const type = input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
       const size = Number(input.size || 0);
       const limit = type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024;
       const extension = String(input.extension || '').toLowerCase();
       const allowed = type === 'image' ? ['.jpg', '.jpeg', '.png', '.webp'] : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
-      if (!device || !type || !Number.isSafeInteger(size) || size < 1 || size > limit || !allowed.includes(extension)) badRequest();
-      const key = `mobile-library/uploads/${device.id}/${require('node:crypto').randomUUID()}${extension}`;
+      const uploader = device || editor;
+      if (!uploader || !type || !Number.isSafeInteger(size) || size < 1 || size > limit || !allowed.includes(extension)) badRequest();
+      const key = `mobile-library/uploads/${uploader.id}/${require('node:crypto').randomUUID()}${extension}`;
       const uploadUrl = await getStore().signedPutUrl(key, String(input.contentType || 'application/octet-stream'));
       return json(res, 200, { key, uploadUrl, method: 'PUT' });
     }
     if (action === 'song-asset' && req.method === 'POST') {
       await emergency.assertWriteAllowed();
-      if (!device) throw unauthorized();
+      const uploader = device || editor;
+      if (!uploader) throw unauthorized();
       const input = body(req);
       const id = String(input.id || '').trim();
       const type = input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
       const source = String(input.key || '');
-      if (!/^[0-9]{1,12}$/.test(id) || !type || !source.startsWith(`mobile-library/uploads/${device.id}/`)) badRequest();
+      if (!/^[0-9]{1,12}$/.test(id) || !type || !source.startsWith(`mobile-library/uploads/${uploader.id}/`)) badRequest();
       const head = await getStore().head(source);
       if (!head || head.size < 1 || head.size > (type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024)) badRequest();
       const extension = source.slice(source.lastIndexOf('.')).toLowerCase();
