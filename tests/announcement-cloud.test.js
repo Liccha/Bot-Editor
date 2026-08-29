@@ -213,6 +213,42 @@ test('teacharm website posts use the cloud store with revisions and safe names',
   assert.equal((await call('GET', 'website-read', { headers: desktopHeaders, query: { name } })).status, 404);
 });
 
+test('unchanged website mirror checks use only the tiny revision marker', async () => {
+  const desktopHeaders = { authorization: 'Desktop desktop-token-for-tests-only', 'x-admin-device': 'website-sync-test' };
+  const created = await call('POST', 'website-save', {
+    headers: desktopHeaders,
+    body: { name: '同步快照.md', content: '只应在版本变化时读取正文' }
+  });
+  assert.equal(created.status, 200);
+
+  const initial = await call('GET', 'website-sync', { headers: desktopHeaders, query: { after: 0 } });
+  assert.equal(initial.status, 200);
+  assert.equal(initial.body.unchanged, false);
+  assert.ok(initial.body.posts.some(post => post.name === '同步快照.md'));
+
+  const store = getStore();
+  const originalGet = store.get.bind(store);
+  let fullDocumentReads = 0;
+  store.get = async key => {
+    if (key === 'website/teacharm.moe/posts/current.json') fullDocumentReads++;
+    return originalGet(key);
+  };
+  try {
+    const unchanged = await call('GET', 'website-sync', {
+      headers: desktopHeaders,
+      query: { after: initial.body.revision }
+    });
+    assert.equal(unchanged.status, 200);
+    assert.equal(unchanged.body.revision, initial.body.revision);
+    assert.equal(unchanged.body.updatedAt, initial.body.updatedAt);
+    assert.equal(unchanged.body.unchanged, true);
+    assert.deepEqual(unchanged.body.posts, []);
+    assert.equal(fullDocumentReads, 0);
+  } finally {
+    store.get = originalGet;
+  }
+});
+
 test('website post APIs reject unauthenticated callers', async () => {
   assert.equal((await call('GET', 'website-list')).status, 401);
   assert.equal((await call('POST', 'website-save', { body: { name: '未授权.md', content: 'x' } })).status, 401);

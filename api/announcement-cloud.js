@@ -125,6 +125,9 @@ module.exports = async function handler(req, res) {
     if (action.startsWith('website-')) {
       const session = await admin(req, desktop); if (!session) return json(res, 401, { error: 'admin authorization required' });
       const auditActor = actor(req, session.sub || device(req), session.desktop ? 'mczmaker' : 'admin');
+      if (action === 'website-sync' && req.method === 'GET') {
+        return json(res, 200, await websitePosts.syncSnapshot(query(req, 'after')));
+      }
       if (action === 'website-list' && req.method === 'GET') return json(res, 200, await websitePosts.list());
       if (action === 'website-read' && req.method === 'GET') return json(res, 200, await websitePosts.read(String(query(req, 'name') || '')));
       if (action === 'website-save' && (req.method === 'POST' || req.method === 'PUT')) {
