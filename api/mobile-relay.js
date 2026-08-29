@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { getStore } = require('./_lib/storage');
+const { getStore, withStorageMetrics, currentStorageMetrics } = require('./_lib/storage');
 const security = require('./_lib/security');
 const emergency = require('./_lib/emergency-lock');
 const repo = require('./_lib/repository');
@@ -24,6 +24,9 @@ function json(res, status, value) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  const metrics = currentStorageMetrics();
+  res.setHeader('X-OSS-Read-Count', String(metrics.gets));
+  res.setHeader('X-OSS-Read-Bytes', String(metrics.bytes));
   res.end(JSON.stringify(value));
 }
 
@@ -198,7 +201,7 @@ function publicDevice(item) {
   return { id: item.id, name: item.name, status: item.status || 'active', createdAt: item.createdAt, revokedAt: item.revokedAt || null };
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   const action = String(query(req, 'action') || 'health');
   try {
     if (action === 'health' && req.method === 'GET') {
@@ -404,4 +407,8 @@ module.exports = async function handler(req, res) {
             : status === 400 ? 'invalid request' : 'internal'
     });
   }
+}
+
+module.exports = function measuredHandler(req, res) {
+  return withStorageMetrics(() => handler(req, res));
 };
