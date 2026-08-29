@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { config } = require('./_lib/config');
-const { getStore, withStorageMetrics, currentStorageMetrics } = require('./_lib/storage');
+const { getStore } = require('./_lib/storage');
 const repo = require('./_lib/repository');
 const websitePosts = require('./_lib/website-posts');
 const security = require('./_lib/security');
@@ -12,9 +12,6 @@ function json(res, status, value, headers = {}) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  const metrics = currentStorageMetrics();
-  res.setHeader('X-OSS-Read-Count', String(metrics.gets));
-  res.setHeader('X-OSS-Read-Bytes', String(metrics.bytes));
   for (const [key, val] of Object.entries(headers)) res.setHeader(key, val);
   res.end(JSON.stringify(value));
 }
@@ -55,7 +52,7 @@ function sanitizeName(name) {
   return repo.sanitizeAttachmentName(name, 'file.bin');
 }
 
-async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const action = String(query(req, 'action') || 'health');
   try {
     const cfg = config();
@@ -213,8 +210,4 @@ async function handler(req, res) {
             : 'internal';
     return json(res, safeStatus, { error: publicError });
   }
-}
-
-module.exports = function measuredHandler(req, res) {
-  return withStorageMetrics(() => handler(req, res));
 };
