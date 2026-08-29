@@ -92,7 +92,7 @@ async function readStoredDocument(definition) {
   const document = JSON.parse(legacy.body.toString('utf8'));
   const compactBody = gzip(legacy.body);
   try {
-    await store.put(definition.compactKey, compactBody, compact ? {} : { ifNoneMatch: true });
+    await store.put(definition.compactKey, compactBody, compact ? {} : { forbidOverwrite: true });
   } catch (error) {
     if (!['PreconditionFailed', 'FileAlreadyExists', 'ObjectAlreadyExists'].includes(String(error?.code || ''))
       && Number(error?.status || error?.statusCode || 0) !== 409) throw error;
