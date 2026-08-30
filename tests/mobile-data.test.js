@@ -106,6 +106,18 @@ test('self-enrolled workstation editor can edit library data but cannot use the 
     body: { id: '1', values: { song_name: '外部工作站修改' } }
   });
   assert.equal(updated.status, 200);
+  const created = await call(data, 'POST', 'song-create', {
+    headers,
+    body: { id: '1273', values: { song_name: '云端新歌', author: '新作者', '4k_ez': '3-100' } }
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.created, true);
+  const createdList = await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } });
+  assert.equal(createdList.body.total, 1);
+  assert.equal(createdList.body.items[0].song_name, '云端新歌');
+  assert.equal((await call(data, 'POST', 'song-create', {
+    headers, body: { id: '1273', values: { song_name: '重复' } }
+  })).status, 409, 'duplicate cloud song IDs must be rejected without overwriting');
   const relayAttempt = await call(relay, 'GET', 'presence', { headers });
   assert.equal(relayAttempt.status, 401, 'library-only installation must not control SongBot or NapCat');
 });
@@ -187,7 +199,7 @@ test('repeated cloud status checks never download full library snapshots', async
   try {
     for (let index = 0; index < 5; index++) {
       const response = await coldLibrary.status();
-      assert.equal(response.songs.total, 2);
+      assert.equal(response.songs.total, 3);
       assert.equal(response.stable.total, 1);
     }
   } finally {
@@ -207,7 +219,7 @@ test('cold library reads migrate to and prefer a compact gzip snapshot', async (
   delete require.cache[libraryModule];
   const migratingLibrary = require('../api/_lib/mobile-library');
   const first = await migratingLibrary.list('songs', '', 0, 100);
-  assert.equal(first.total, 2);
+  assert.equal(first.total, 3);
   const raw = await store.get(rawKey);
   const compact = await store.get(compactKey);
   assert.ok(compact, 'first legacy read should create the compact snapshot');

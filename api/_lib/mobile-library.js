@@ -163,15 +163,64 @@ async function reconstructChanges(dataset, document) {
   const reconstructed = [];
   for (const item of document.items) {
     const id = String(item[idColumn] || '').trim();
+    const existed = baselineById.has(id);
     const original = baselineById.get(id) || {};
     const values = {};
     for (const column of document.columns) {
       if (column.toLowerCase() === definition.id) continue;
       if (String(item[column] || '') !== String(original[column] || '')) values[column] = String(item[column] || '');
     }
-    if (Object.keys(values).length > 0) reconstructed.push({ revision, id, values, reconstructed: true });
+    if (Object.keys(values).length > 0) reconstructed.push({ revision, id, values, created: !existed, reconstructed: true });
   }
   return reconstructed;
+}
+
+async function create(dataset, rawId, rawValues, actor) {
+  const definition = spec(dataset);
+  const id = String(rawId || '').trim();
+  if (!/^[0-9]{1,12}$/.test(id)) throw error(400, 'invalid id');
+  if (!rawValues || typeof rawValues !== 'object' || Array.isArray(rawValues)) throw error(400, 'invalid values');
+  return repo.withLock(`mobile-library-${dataset}`, async () => {
+    const document = await read(dataset, { fresh: true });
+    if (!document) throw error(503, 'dataset not initialized');
+    const allowed = new Map(document.columns.map(column => [column.toLowerCase(), column]));
+    const idColumn = allowed.get(definition.id);
+    if (document.items.some(candidate => String(candidate[idColumn] || '').trim() === id)) {
+      throw error(409, 'record already exists');
+    }
+    if (document.items.length >= definition.maxItems) throw error(409, 'dataset item limit reached');
+    const item = {};
+    for (const column of document.columns) item[column] = '';
+    item[idColumn] = id;
+    const values = {};
+    for (const [key, input] of Object.entries(rawValues)) {
+      const actual = allowed.get(String(key).toLowerCase());
+      if (!actual || actual.toLowerCase() === definition.id) continue;
+      const next = cleanText(input);
+      item[actual] = next;
+      values[actual] = next;
+    }
+    document.items.push(item);
+    document.items.sort((left, right) => Number(left[idColumn]) - Number(right[idColumn]));
+    document.revision = Number(document.revision || 0) + 1;
+    document.updatedAt = now();
+    const change = { schema: 1, dataset, revision: document.revision, id, values, before: {}, created: true,
+      at: document.updatedAt, actor: { kind: actor.kind, id: actor.id || '' } };
+    if (!Array.isArray(document.changes)) document.changes = await reconstructChanges(dataset, document);
+    else document.changes.push({ revision: change.revision, id, values, created: true, at: change.at });
+    if (document.changes.length > MAX_CHANGE_LOG) {
+      document.changes = document.changes.slice(document.changes.length - MAX_CHANGE_LOG);
+    }
+    document.schema = 2;
+    const stamp = String(document.revision).padStart(12, '0');
+    const bytes = Buffer.from(JSON.stringify(document));
+    await getStore().put(`mobile-library/${dataset}/changes/${stamp}-${crypto.randomUUID()}.json`, Buffer.from(JSON.stringify(change)), { forbidOverwrite: true });
+    await writeCurrentSnapshots(definition, bytes);
+    await writeRevisionMarker(dataset, document);
+    caches.set(dataset, { at: Date.now(), document });
+    await repo.writeAudit({ event: dataset === 'songs' ? 'MOBILE_SONG_CREATED' : 'MOBILE_STABLE_CREATED', actor, id, values, revision: document.revision });
+    return { ok: true, created: true, revision: document.revision, updatedAt: document.updatedAt };
+  });
 }
 
 async function update(dataset, rawId, rawValues, actor) {
@@ -253,6 +302,7 @@ async function changes(dataset, requestedAfter, requestedLimit) {
     const page = log.filter(item => Number(item.revision || 0) <= cutoff).map(item => ({
       revision: Number(item.revision || 0),
       id: cleanText(item.id, 24).trim(),
+      created: item.created === true,
       values: item.values && typeof item.values === 'object' && !Array.isArray(item.values)
         ? clone(item.values) : {}
     }));
@@ -282,4 +332,4 @@ async function status() {
     stable: stable ? { total: stable.total, revision: stable.revision, updatedAt: stable.updatedAt } : null };
 }
 
-module.exports = { bootstrap, changes, list, read, status, update };
+module.exports = { bootstrap, changes, create, list, read, status, update };

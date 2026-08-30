@@ -58,6 +58,12 @@ module.exports = async function handler(req, res) {
       const id = action === 'song' ? input.id : input.sid;
       return json(res, 200, await library.update(dataset, id, input.values, actor));
     }
+    if (action === 'song-create' && req.method === 'POST') {
+      await emergency.assertWriteAllowed();
+      if (editor) await editorAuth.assertMutationAllowed(editor);
+      const input = body(req);
+      return json(res, 201, await library.create('songs', input.id, input.values, actor));
+    }
     if ((action === 'bootstrap-songs' || action === 'bootstrap-stable') && req.method === 'POST') {
       if (!desktop) throw unauthorized();
       await emergency.assertWriteAllowed();
