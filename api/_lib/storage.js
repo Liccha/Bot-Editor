@@ -157,7 +157,7 @@ async function nativeSignedRequest(client, key, method) {
   const url = client.signatureUrl(key, { method, expires: 60 });
   let response;
   try {
-    response = await fetch(url, { method, signal: AbortSignal.timeout(3_500) });
+    response = await fetch(url, { method, signal: AbortSignal.timeout(8_000) });
   } catch (error) {
     if (transientReadError(error)) return null;
     throw error;

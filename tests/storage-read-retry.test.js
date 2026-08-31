@@ -156,6 +156,34 @@ test('OSS metadata writes use one signed native HTTP PUT with conditional header
   }
 });
 
+test('OSS native reads allow the observed cross-region latency without becoming unbounded', async () => {
+  const store = Object.create(OssStore.prototype);
+  store.readClient = { async get() { throw new Error('native HTTP should satisfy this read'); } };
+  store.client = {
+    signatureUrl() { return 'https://example.oss-cn-beijing.aliyuncs.com/current.json.gz?signature=redacted'; },
+  };
+  const originalFetch = global.fetch;
+  const originalTimeout = AbortSignal.timeout;
+  let deadline = 0;
+  AbortSignal.timeout = milliseconds => {
+    deadline = milliseconds;
+    return new AbortController().signal;
+  };
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    arrayBuffer: async () => Buffer.from('snapshot'),
+  });
+  try {
+    await store.get('mobile-library/songs/current.json.gz');
+    assert.equal(deadline, 8_000);
+  } finally {
+    AbortSignal.timeout = originalTimeout;
+    global.fetch = originalFetch;
+  }
+});
+
 test('OSS lock cleanup uses signed native HTTP DELETE instead of the SDK path', async () => {
   const store = Object.create(OssStore.prototype);
   let sdkAttempts = 0;
