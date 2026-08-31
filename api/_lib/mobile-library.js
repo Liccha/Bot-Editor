@@ -101,8 +101,10 @@ async function readStoredDocument(definition) {
 }
 async function writeCurrentSnapshots(definition, bytes, options = {}) {
   const store = getStore();
-  await store.put(definition.key, bytes, options);
-  await store.put(definition.compactKey, gzip(bytes), options);
+  await Promise.all([
+    store.put(definition.key, bytes, options),
+    store.put(definition.compactKey, gzip(bytes), options)
+  ]);
 }
 
 async function read(dataset, options = {}) {
@@ -171,6 +173,10 @@ async function reconstructChanges(dataset, document) {
       if (String(item[column] || '') !== String(original[column] || '')) values[column] = String(item[column] || '');
     }
     if (Object.keys(values).length > 0) reconstructed.push({ revision, id, values, created: !existed, reconstructed: true });
+  }
+  const currentIds = new Set(document.items.map(item => String(item[idColumn] || '').trim()));
+  for (const [id] of baselineById) {
+    if (!currentIds.has(id)) reconstructed.push({ revision, id, values: {}, deleted: true, reconstructed: true });
   }
   return reconstructed;
 }
@@ -278,6 +284,40 @@ async function update(dataset, rawId, rawValues, actor) {
   });
 }
 
+async function remove(dataset, rawId, actor) {
+  const definition = spec(dataset);
+  const id = String(rawId || '').trim();
+  if (!/^[0-9]{1,12}$/.test(id)) throw error(400, 'invalid id');
+  return repo.withLock(`mobile-library-${dataset}`, async () => {
+    const document = await read(dataset, { fresh: true });
+    if (!document) throw error(503, 'dataset not initialized');
+    const idColumn = document.columns.find(column => column.toLowerCase() === definition.id);
+    const index = document.items.findIndex(candidate => String(candidate[idColumn] || '').trim() === id);
+    if (index < 0) throw error(404, 'record not found');
+    const before = clone(document.items[index]);
+    document.items.splice(index, 1);
+    document.revision = Number(document.revision || 0) + 1;
+    document.updatedAt = now();
+    const change = { schema: 1, dataset, revision: document.revision, id, values: {}, before, deleted: true,
+      at: document.updatedAt, actor: { kind: actor.kind, id: actor.id || '' } };
+    if (!Array.isArray(document.changes)) document.changes = await reconstructChanges(dataset, document);
+    else document.changes.push({ revision: change.revision, id, values: {}, deleted: true, at: change.at });
+    if (document.changes.length > MAX_CHANGE_LOG) {
+      document.changes = document.changes.slice(document.changes.length - MAX_CHANGE_LOG);
+    }
+    document.schema = 2;
+    const stamp = String(document.revision).padStart(12, '0');
+    const bytes = Buffer.from(JSON.stringify(document));
+    await getStore().put(`mobile-library/${dataset}/changes/${stamp}-${crypto.randomUUID()}.json`, Buffer.from(JSON.stringify(change)), { forbidOverwrite: true });
+    await writeCurrentSnapshots(definition, bytes);
+    await writeRevisionMarker(dataset, document);
+    caches.set(dataset, { at: Date.now(), document });
+    await repo.writeAudit({ event: dataset === 'songs' ? 'MOBILE_SONG_DELETED' : 'MOBILE_STABLE_DELETED', actor, id,
+      before, revision: document.revision });
+    return { ok: true, deleted: true, revision: document.revision, updatedAt: document.updatedAt };
+  });
+}
+
 async function changes(dataset, requestedAfter, requestedLimit) {
   spec(dataset);
   const after = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Number(requestedAfter) || 0));
@@ -303,6 +343,7 @@ async function changes(dataset, requestedAfter, requestedLimit) {
       revision: Number(item.revision || 0),
       id: cleanText(item.id, 24).trim(),
       created: item.created === true,
+      deleted: item.deleted === true,
       values: item.values && typeof item.values === 'object' && !Array.isArray(item.values)
         ? clone(item.values) : {}
     }));
@@ -332,4 +373,4 @@ async function status() {
     stable: stable ? { total: stable.total, revision: stable.revision, updatedAt: stable.updatedAt } : null };
 }
 
-module.exports = { bootstrap, changes, create, list, read, status, update };
+module.exports = { bootstrap, changes, create, list, read, remove, status, update };

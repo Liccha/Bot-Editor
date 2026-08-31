@@ -64,6 +64,12 @@ module.exports = async function handler(req, res) {
       const input = body(req);
       return json(res, 201, await library.create('songs', input.id, input.values, actor));
     }
+    if (action === 'song-delete' && req.method === 'POST') {
+      await emergency.assertWriteAllowed();
+      if (editor) await editorAuth.assertMutationAllowed(editor);
+      const input = body(req);
+      return json(res, 200, await library.remove('songs', input.id, actor));
+    }
     if ((action === 'bootstrap-songs' || action === 'bootstrap-stable') && req.method === 'POST') {
       if (!desktop) throw unauthorized();
       await emergency.assertWriteAllowed();

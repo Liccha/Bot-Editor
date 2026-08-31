@@ -118,6 +118,14 @@ test('self-enrolled workstation editor can edit library data but cannot use the 
   assert.equal((await call(data, 'POST', 'song-create', {
     headers, body: { id: '1273', values: { song_name: '重复' } }
   })).status, 409, 'duplicate cloud song IDs must be rejected without overwriting');
+  const removed = await call(data, 'POST', 'song-delete', { headers, body: { id: '1273' } });
+  assert.equal(removed.status, 200);
+  assert.equal(removed.body.deleted, true);
+  assert.equal((await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } })).body.total, 0,
+    'deleted song ID remained occupied');
+  assert.equal((await call(data, 'POST', 'song-create', {
+    headers, body: { id: '1273', values: { song_name: '释放后复用', author: '新作者' } }
+  })).status, 201, 'released cloud song ID could not be reused');
   const relayAttempt = await call(relay, 'GET', 'presence', { headers });
   assert.equal(relayAttempt.status, 401, 'library-only installation must not control SongBot or NapCat');
 });
