@@ -92,16 +92,22 @@ test('album_ids updates are visible through the exact song endpoint', async () =
 
 test('workstation can obtain a short-lived download URL for managed song media', async () => {
   const key = 'mobile-library/assets/image/3/11111111-2222-4333-8444-555555555555.jpg';
-  await getStore().put(key, Buffer.from('managed-cover'));
-
-  const response = await call(data, 'GET', 'asset-download', {
-    headers: desktop,
-    query: { key }
-  });
+  const store = getStore();
+  const originalHead = store.head.bind(store);
+  store.head = async () => { throw new Error('object store temporarily unavailable'); };
+  let response;
+  try {
+    response = await call(data, 'GET', 'asset-download', {
+      headers: desktop,
+      query: { key }
+    });
+  } finally {
+    store.head = originalHead;
+  }
   assert.equal(response.status, 200);
   assert.equal(response.body.key, key);
   assert.match(response.body.url, /announcement-cloud/);
-  assert.equal(response.body.size, Buffer.byteLength('managed-cover'));
+  assert.equal('size' in response.body, false, 'issuing a signed URL must not make a paid OSS HEAD request');
 
   assert.equal((await call(data, 'GET', 'asset-download', {
     query: { key }
@@ -110,10 +116,6 @@ test('workstation can obtain a short-lived download URL for managed song media',
     headers: desktop,
     query: { key: 'mobile-library/assets/image/3/../../secret.jpg' }
   })).status, 400, 'unsafe object keys must be rejected before signing');
-  assert.equal((await call(data, 'GET', 'asset-download', {
-    headers: desktop,
-    query: { key: 'mobile-library/assets/audio/3/missing.mp3' }
-  })).status, 404, 'missing song media must not receive a download ticket');
 });
 
 test('a contended song write reports write_busy instead of pretending data is uninitialized', async () => {

@@ -67,14 +67,8 @@ module.exports = async function handler(req, res) {
       const asset = managedAssetKey(query(req, 'key'));
       if (!asset) badRequest();
       const store = getStore();
-      const head = await store.head(asset.key);
-      const maximum = asset.type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024;
-      if (!head) { const missing = new Error('asset not found'); missing.statusCode = 404; throw missing; }
-      if (!Number.isSafeInteger(head.size) || head.size < 1 || head.size > maximum) badRequest();
       return json(res, 200, {
         key: asset.key,
-        size: head.size,
-        etag: String(head.etag || ''),
         url: await store.signedGetUrl(asset.key)
       });
     }
