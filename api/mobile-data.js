@@ -68,7 +68,15 @@ module.exports = async function handler(req, res) {
       await emergency.assertWriteAllowed();
       if (editor) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
-      return json(res, 200, await library.remove('songs', input.id, actor));
+      const id = String(input.id || '').trim();
+      if (!/^[0-9]{1,12}$/.test(id)) badRequest();
+      const result = await library.remove('songs', id, actor);
+      const store = getStore();
+      await Promise.all([
+        store.deletePrefix(`mobile-library/assets/image/${id}/`),
+        store.deletePrefix(`mobile-library/assets/audio/${id}/`)
+      ]);
+      return json(res, 200, result);
     }
     if ((action === 'bootstrap-songs' || action === 'bootstrap-stable') && req.method === 'POST') {
       if (!desktop) throw unauthorized();

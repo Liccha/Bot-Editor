@@ -118,9 +118,18 @@ test('self-enrolled workstation editor can edit library data but cannot use the 
   assert.equal((await call(data, 'POST', 'song-create', {
     headers, body: { id: '1273', values: { song_name: '重复' } }
   })).status, 409, 'duplicate cloud song IDs must be rejected without overwriting');
+  await getStore().put('mobile-library/assets/image/1273/old.webp', Buffer.from('old-cover'));
+  await getStore().put('mobile-library/assets/image/1273/current.webp', Buffer.from('current-cover'));
+  await getStore().put('mobile-library/assets/audio/1273/current.mp3', Buffer.from('current-audio'));
   const removed = await call(data, 'POST', 'song-delete', { headers, body: { id: '1273' } });
   assert.equal(removed.status, 200);
   assert.equal(removed.body.deleted, true);
+  assert.equal(await getStore().get('mobile-library/assets/image/1273/old.webp'), null,
+    'deleting a song left an old cloud cover behind');
+  assert.equal(await getStore().get('mobile-library/assets/image/1273/current.webp'), null,
+    'deleting a song left its current cloud cover behind');
+  assert.equal(await getStore().get('mobile-library/assets/audio/1273/current.mp3'), null,
+    'deleting a song left its cloud audio behind');
   assert.equal((await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } })).body.total, 0,
     'deleted song ID remained occupied');
   assert.equal((await call(data, 'POST', 'song-create', {

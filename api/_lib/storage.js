@@ -57,6 +57,11 @@ class LocalStore {
     return { etag: saved.etag };
   }
   async delete(key) { await fs.rm(this.resolve(key), { force: true }); }
+  async deletePrefix(prefix) {
+    const normalized = String(prefix || '').replace(/\\/g, '/');
+    if (!normalized.endsWith('/')) throw new Error('unsafe object prefix');
+    await fs.rm(this.resolve(normalized), { recursive: true, force: true });
+  }
   async copy(source, target) {
     const src = this.resolve(source); const dst = this.resolve(target);
     await fs.mkdir(path.dirname(dst), { recursive: true });
@@ -90,6 +95,19 @@ class OssStore {
     return { etag: cleanEtag(result.res.headers.etag) };
   }
   async delete(key) { await this.client.delete(key); }
+  async deletePrefix(prefix) {
+    const normalized = String(prefix || '').replace(/\\/g, '/');
+    if (!normalized || normalized.includes('..') || normalized.startsWith('/') || !normalized.endsWith('/')) {
+      throw new Error('unsafe object prefix');
+    }
+    for (let page = 0; page < 1000; page += 1) {
+      const listed = await this.client.listV2({ prefix: normalized, 'max-keys': 1000 });
+      const names = (listed.objects || []).map(item => item.name).filter(Boolean);
+      if (names.length === 0) return;
+      await this.client.deleteMulti(names, { quiet: true });
+    }
+    throw new Error('object prefix deletion did not converge');
+  }
   async copy(source, target) { await this.client.copy(target, source); }
   async head(key) {
     try {
