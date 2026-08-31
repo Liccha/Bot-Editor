@@ -33,7 +33,7 @@ function call(handler, method, action, { body, headers = {}, query = {} } = {}) 
 
 test('paired device reads and edits cloud data with no desktop poll', async () => {
   const songs = await call(data, 'POST', 'bootstrap-songs', { headers: desktop, body: {
-    columns: ['id', 'song_name', 'author', '4k_ez'],
+    columns: ['id', 'song_name', 'author', '4k_ez', 'album_image_path', 'image_path', 'audio_path'],
     items: [
       { id: '1', song_name: '第一首', author: 'A', '4k_ez': '1-100' },
       { id: '3', song_name: '第三首', author: 'B', '4k_ez': '0-0' }
@@ -108,16 +108,50 @@ test('self-enrolled workstation editor can edit library data but cannot use the 
   assert.equal(updated.status, 200);
   const created = await call(data, 'POST', 'song-create', {
     headers,
-    body: { id: '1273', values: { song_name: '云端新歌', author: '新作者', '4k_ez': '3-100' } }
+    body: { id: '1273', values: { song_name: '云端新歌', author: '新作者', '4k_ez': '3-100',
+      image_path: 'C:\\Users\\editor\\Desktop\\合集\\1273.jpg',
+      audio_path: 'C:\\Users\\editor\\Desktop\\preview\\1273.mp3' } }
   });
   assert.equal(created.status, 201);
   assert.equal(created.body.created, true);
   const createdList = await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } });
   assert.equal(createdList.body.total, 1);
   assert.equal(createdList.body.items[0].song_name, '云端新歌');
-  assert.equal((await call(data, 'POST', 'song-create', {
+  assert.equal(createdList.body.items[0].image_path, '', 'a workstation image path leaked into cloud metadata');
+  assert.equal(createdList.body.items[0].audio_path, '', 'a workstation audio path leaked into cloud metadata');
+  await call(data, 'POST', 'song', { headers, body: { id: '1273', values: {
+    audio_path: 'C:\\Users\\editor\\Desktop\\preview\\1273.mp3'
+  } } });
+  const pathUpdateList = await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } });
+  assert.equal(pathUpdateList.body.items[0].audio_path, '', 'a workstation path leaked through a normal metadata update');
+  const partialUpload = `mobile-library/uploads/${enrolled.body.id}/partial.webp`;
+  await getStore().put(partialUpload, Buffer.from('partial-cover'));
+  const partialAsset = await call(data, 'POST', 'song-asset', {
+    headers, body: { id: '1273', type: 'image', key: partialUpload }
+  });
+  assert.equal(partialAsset.status, 200);
+  const partialList = await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } });
+  assert.equal(partialList.body.items[0].image_path,
+    'cloud-object:mobile-library/assets/image/1273/partial.webp', 'asset pointer was not committed deterministically');
+  const resumed = await call(data, 'POST', 'song-create', {
+    headers,
+    body: { id: '1273', values: { song_name: '云端新歌', author: '新作者', '4k_ez': '3-100',
+      image_path: 'C:\\Users\\editor\\Desktop\\合集\\1273.jpg',
+      audio_path: 'C:\\Users\\editor\\Desktop\\preview\\1273.mp3' } }
+  });
+  assert.equal(resumed.status, 200, 'a retry after a partial asset upload must resume idempotently');
+  assert.equal(resumed.body.resumed, true);
+  const replayedAsset = await call(data, 'POST', 'song-asset', {
+    headers, body: { id: '1273', type: 'image', key: partialUpload }
+  });
+  assert.equal(replayedAsset.status, 200,
+    `a lost asset response must be safely replayable after its upload source is deleted: ${JSON.stringify(replayedAsset.body)}`);
+  assert.equal(replayedAsset.body.replayed, true);
+  const conflicting = await call(data, 'POST', 'song-create', {
     headers, body: { id: '1273', values: { song_name: '重复' } }
-  })).status, 409, 'duplicate cloud song IDs must be rejected without overwriting');
+  });
+  assert.equal(conflicting.status, 409, 'duplicate cloud song IDs must be rejected without overwriting');
+  assert.equal(conflicting.body.error, 'record already exists');
   await getStore().put('mobile-library/assets/image/1273/old.webp', Buffer.from('old-cover'));
   await getStore().put('mobile-library/assets/image/1273/current.webp', Buffer.from('current-cover'));
   await getStore().put('mobile-library/assets/audio/1273/current.mp3', Buffer.from('current-audio'));

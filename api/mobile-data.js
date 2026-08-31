@@ -62,7 +62,8 @@ module.exports = async function handler(req, res) {
       await emergency.assertWriteAllowed();
       if (editor) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
-      return json(res, 201, await library.create('songs', input.id, input.values, actor));
+      const result = await library.create('songs', input.id, input.values, actor);
+      return json(res, result.created === false ? 200 : 201, result);
     }
     if (action === 'song-delete' && req.method === 'POST') {
       await emergency.assertWriteAllowed();
@@ -108,28 +109,45 @@ module.exports = async function handler(req, res) {
       const type = input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
       const source = String(input.key || '');
       if (!/^[0-9]{1,12}$/.test(id) || !type || !source.startsWith(`mobile-library/uploads/${uploader.id}/`)) badRequest();
-      const head = await getStore().head(source);
-      if (!head || head.size < 1 || head.size > (type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024)) badRequest();
       const extension = source.slice(source.lastIndexOf('.')).toLowerCase();
       if (type === 'image' ? !['.jpg', '.jpeg', '.png', '.webp'].includes(extension)
         : !['.mp3', '.wav', '.flac', '.m4a', '.ogg'].includes(extension)) badRequest();
-      const target = `mobile-library/assets/${type}/${id}/${require('node:crypto').randomUUID()}${extension}`;
+      const fileName = source.slice(source.lastIndexOf('/') + 1);
+      const target = `mobile-library/assets/${type}/${id}/${fileName}`;
+      const field = type === 'image' ? 'image_path' : 'audio_path';
+      const pointer = `cloud-object:${target}`;
+      const current = await library.item('songs', id);
+      if (current && String(current[field] || '') === pointer) {
+        await getStore().delete(source).catch(() => {});
+        return json(res, 200, { ok: true, stored: true, replayed: true });
+      }
+      const head = await getStore().head(source);
+      if (!head || head.size < 1 || head.size > (type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024)) badRequest();
       await getStore().copy(source, target);
-      const result = await library.update('songs', id, {
-        [type === 'image' ? 'image_path' : 'audio_path']: `cloud-object:${target}`
-      }, actor);
+      const result = await library.update('songs', id, { [field]: pointer }, actor, { managedAssets: true });
       await getStore().delete(source).catch(() => {});
+      const previous = String(current?.[field] || '');
+      const assetPrefix = `cloud-object:mobile-library/assets/${type}/${id}/`;
+      if (previous.startsWith(assetPrefix) && previous !== pointer) {
+        await getStore().delete(previous.slice('cloud-object:'.length)).catch(() => {});
+      }
       return json(res, 200, { ...result, stored: true });
     }
     return json(res, 405, { error: 'unsupported action or method' });
   } catch (error) {
     const status = Number(error.statusCode || 500);
     if (status >= 500) console.error('mobile-data', action, { name: String(error.name || 'Error'), status });
+    const conflict = String(error.publicCode || '');
+    const conflictMessage = conflict === 'record_exists' ? 'record already exists'
+      : conflict === 'dataset_initialized' ? 'already initialized'
+        : conflict === 'dataset_limit' ? 'dataset item limit reached'
+          : conflict === 'baseline_unavailable' ? 'baseline unavailable' : 'conflict';
     return json(res, status >= 400 && status < 600 ? status : 500, {
       error: status === 423 ? 'cloud writes temporarily locked'
         : status === 401 || status === 403 ? 'not authorized'
-          : status === 404 ? 'not found' : status === 409 ? 'already initialized'
-            : status === 400 ? 'invalid request' : status === 503 ? 'cloud data not initialized' : 'internal'
+          : status === 404 ? 'not found' : status === 409 ? conflictMessage
+            : status === 400 ? 'invalid request' : status === 503 ? 'cloud data not initialized' : 'internal',
+      ...(status === 409 && conflict ? { code: conflict } : {})
     });
   }
 };

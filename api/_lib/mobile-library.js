@@ -9,10 +9,16 @@ const DATASETS = {
 };
 const MAX_CHANGE_LOG = 4000;
 const MAX_DOCUMENT_BYTES = 32 * 1024 * 1024;
+const MANAGED_SONG_ASSET_FIELDS = new Set(['album_image_path', 'image_path', 'audio_path']);
 const caches = new Map();
 
 function now() { return new Date().toISOString(); }
-function error(statusCode, message) { const value = new Error(message); value.statusCode = statusCode; return value; }
+function error(statusCode, message, code = '') {
+  const value = new Error(message);
+  value.statusCode = statusCode;
+  if (code) value.publicCode = code;
+  return value;
+}
 function spec(name) { const value = DATASETS[name]; if (!value) throw error(400, 'invalid dataset'); return value; }
 function revisionKey(dataset) { spec(dataset); return `mobile-library/${dataset}/revision.json`; }
 function revisionMarker(dataset, document) {
@@ -121,7 +127,7 @@ async function read(dataset, options = {}) {
 async function bootstrap(dataset, raw, actor) {
   const definition = spec(dataset);
   return repo.withLock(`mobile-library-${dataset}`, async () => {
-    if (await getStore().get(definition.key)) throw error(409, 'dataset already initialized');
+    if (await getStore().get(definition.key)) throw error(409, 'dataset already initialized', 'dataset_initialized');
     const columns = cleanColumns(raw.columns);
     const idColumn = columns.find(column => column.toLowerCase() === definition.id);
     if (!idColumn) throw error(400, `missing ${definition.id}`);
@@ -154,10 +160,21 @@ async function list(dataset, query, offset, limit) {
   return listDocument(await read(dataset), query, offset, limit);
 }
 
+async function item(dataset, rawId) {
+  const definition = spec(dataset);
+  const id = String(rawId || '').trim();
+  if (!/^[0-9]{1,12}$/.test(id)) throw error(400, 'invalid id');
+  const document = await read(dataset, { fresh: true });
+  if (!document) throw error(503, 'dataset not initialized');
+  const idColumn = document.columns.find(column => column.toLowerCase() === definition.id);
+  const found = document.items.find(candidate => String(candidate[idColumn] || '').trim() === id);
+  return found ? clone(found) : null;
+}
+
 async function reconstructChanges(dataset, document) {
   const definition = spec(dataset);
   const baselineObject = await getStore().get(`mobile-library/${dataset}/baseline-1.json`);
-  if (!baselineObject) throw error(409, 'baseline unavailable');
+  if (!baselineObject) throw error(409, 'baseline unavailable', 'baseline_unavailable');
   const baseline = JSON.parse(baselineObject.body.toString('utf8'));
   const idColumn = document.columns.find(column => column.toLowerCase() === definition.id);
   const baselineById = new Map((baseline.items || []).map(item => [String(item[idColumn] || '').trim(), item]));
@@ -191,10 +208,20 @@ async function create(dataset, rawId, rawValues, actor) {
     if (!document) throw error(503, 'dataset not initialized');
     const allowed = new Map(document.columns.map(column => [column.toLowerCase(), column]));
     const idColumn = allowed.get(definition.id);
-    if (document.items.some(candidate => String(candidate[idColumn] || '').trim() === id)) {
-      throw error(409, 'record already exists');
+    const existing = document.items.find(candidate => String(candidate[idColumn] || '').trim() === id);
+    if (existing) {
+      const sameSubmission = Object.entries(rawValues).every(([key, input]) => {
+        const actual = allowed.get(String(key).toLowerCase());
+        if (!actual || actual.toLowerCase() === definition.id) return true;
+        if (dataset === 'songs' && MANAGED_SONG_ASSET_FIELDS.has(actual.toLowerCase())) return true;
+        return String(existing[actual] || '') === cleanText(input);
+      });
+      if (!sameSubmission) throw error(409, 'record already exists', 'record_exists');
+      await writeRevisionMarker(dataset, document);
+      return { ok: true, created: false, resumed: true, revision: Number(document.revision || 0),
+        updatedAt: String(document.updatedAt || '') };
     }
-    if (document.items.length >= definition.maxItems) throw error(409, 'dataset item limit reached');
+    if (document.items.length >= definition.maxItems) throw error(409, 'dataset item limit reached', 'dataset_limit');
     const item = {};
     for (const column of document.columns) item[column] = '';
     item[idColumn] = id;
@@ -202,6 +229,7 @@ async function create(dataset, rawId, rawValues, actor) {
     for (const [key, input] of Object.entries(rawValues)) {
       const actual = allowed.get(String(key).toLowerCase());
       if (!actual || actual.toLowerCase() === definition.id) continue;
+      if (dataset === 'songs' && MANAGED_SONG_ASSET_FIELDS.has(actual.toLowerCase())) continue;
       const next = cleanText(input);
       item[actual] = next;
       values[actual] = next;
@@ -229,7 +257,7 @@ async function create(dataset, rawId, rawValues, actor) {
   });
 }
 
-async function update(dataset, rawId, rawValues, actor) {
+async function update(dataset, rawId, rawValues, actor, options = {}) {
   const definition = spec(dataset);
   const id = String(rawId || '').trim();
   if (!/^[0-9]{1,12}$/.test(id)) throw error(400, 'invalid id');
@@ -246,6 +274,7 @@ async function update(dataset, rawId, rawValues, actor) {
     for (const [key, input] of Object.entries(rawValues)) {
       const actual = allowed.get(String(key).toLowerCase());
       if (!actual || actual.toLowerCase() === definition.id) continue;
+      if (dataset === 'songs' && MANAGED_SONG_ASSET_FIELDS.has(actual.toLowerCase()) && options.managedAssets !== true) continue;
       const next = cleanText(input);
       if (String(item[actual] || '') === next) continue;
       before[actual] = String(item[actual] || '');
@@ -373,4 +402,4 @@ async function status() {
     stable: stable ? { total: stable.total, revision: stable.revision, updatedAt: stable.updatedAt } : null };
 }
 
-module.exports = { bootstrap, changes, create, list, read, remove, status, update };
+module.exports = { bootstrap, changes, create, item, list, read, remove, status, update };
