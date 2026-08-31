@@ -79,10 +79,17 @@ class LocalStore {
 }
 
 class OssStore {
-  constructor(options) { this.client = new OSS(options); }
+  constructor(options) {
+    this.client = new OSS(options);
+    // Read traffic crosses regions (Vercel Hong Kong -> OSS Beijing). Keep each
+    // read attempt short enough that a single transient socket failure can be
+    // retried inside the serverless request deadline. Writes keep their normal
+    // timeout and are never replayed implicitly.
+    this.readClient = new OSS({ ...options, timeout: Math.min(Number(options.timeout || 8_000), 3_500), retryMax: 0 });
+  }
   async get(key) {
     try {
-      const result = await this.client.get(key);
+      const result = await readWithRetry(() => (this.readClient || this.client).get(key));
       return { body: Buffer.from(result.content), etag: cleanEtag(result.res.headers.etag) };
     } catch (error) {
       if (error.status === 404 || error.code === 'NoSuchKey') return null;
@@ -114,7 +121,7 @@ class OssStore {
   async copy(source, target) { await this.client.copy(target, source); }
   async head(key) {
     try {
-      const result = await this.client.head(key);
+      const result = await readWithRetry(() => (this.readClient || this.client).head(key));
       return { size: Number(result.res.headers['content-length'] || 0), etag: cleanEtag(result.res.headers.etag) };
     } catch (error) {
       if (error.status === 404 || error.code === 'NoSuchKey') return null;
@@ -125,6 +132,27 @@ class OssStore {
     return this.client.signatureUrl(key, { method: 'PUT', expires: 300, 'Content-Type': contentType || 'application/octet-stream' });
   }
   async signedGetUrl(key) { return this.client.signatureUrl(key, { method: 'GET', expires: 600 }); }
+}
+
+async function readWithRetry(operation) {
+  let last;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try { return await operation(); }
+    catch (error) {
+      last = error;
+      if (attempt > 0 || !transientReadError(error)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 75));
+    }
+  }
+  throw last;
+}
+
+function transientReadError(error) {
+  const status = Number(error?.status || error?.statusCode || 0);
+  if (status === 408 || status === 429 || status >= 500) return true;
+  const code = String(error?.code || error?.name || '');
+  return ['RequestError', 'ConnectionTimeoutError', 'SocketTimeoutError', 'ECONNRESET',
+    'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'EAI_AGAIN'].includes(code);
 }
 
 function cleanEtag(value) { return String(value || '').replace(/^W\//, '').replace(/^"|"$/g, ''); }

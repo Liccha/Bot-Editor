@@ -118,6 +118,35 @@ test('workstation can obtain a short-lived download URL for managed song media',
   })).status, 400, 'unsafe object keys must be rejected before signing');
 });
 
+test('authenticated clients can bypass a failed server-side snapshot read with a signed compact snapshot ticket', async () => {
+  const store = getStore();
+  const originalGet = store.get.bind(store);
+  store.get = async key => {
+    if (key === 'mobile-library/songs/current.json.gz') throw new Error('cross-region read timed out');
+    return originalGet(key);
+  };
+  let ticket;
+  try {
+    ticket = await call(data, 'GET', 'snapshot-ticket', {
+      headers: desktop,
+      query: { dataset: 'songs' }
+    });
+  } finally {
+    store.get = originalGet;
+  }
+  assert.equal(ticket.status, 200);
+  assert.equal(ticket.body.dataset, 'songs');
+  assert.equal(ticket.body.encoding, 'gzip-json');
+  assert.match(ticket.body.url, /announcement-cloud/);
+  assert.equal((await call(data, 'GET', 'snapshot-ticket', {
+    query: { dataset: 'songs' }
+  })).status, 401, 'snapshot tickets must remain authenticated');
+  assert.equal((await call(data, 'GET', 'snapshot-ticket', {
+    headers: desktop,
+    query: { dataset: 'unknown' }
+  })).status, 400, 'only known snapshots may be signed');
+});
+
 test('a contended song write reports write_busy instead of pretending data is uninitialized', async () => {
   let release;
   const held = repo.withLock('mobile-library-songs', () => new Promise(resolve => { release = resolve; }));

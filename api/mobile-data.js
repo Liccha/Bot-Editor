@@ -55,6 +55,16 @@ module.exports = async function handler(req, res) {
     if ((action === 'songs' || action === 'stable') && req.method === 'GET') {
       return json(res, 200, await library.list(action, query(req, 'q'), query(req, 'offset'), query(req, 'limit')));
     }
+    if (action === 'snapshot-ticket' && req.method === 'GET') {
+      const dataset = String(query(req, 'dataset') || '');
+      if (dataset !== 'songs' && dataset !== 'stable') badRequest();
+      const key = `mobile-library/${dataset}/current.json.gz`;
+      return json(res, 200, {
+        dataset,
+        encoding: 'gzip-json',
+        url: await getStore().signedGetUrl(key)
+      });
+    }
     if (action === 'song-item' && req.method === 'GET') {
       const item = await library.item('songs', query(req, 'id'));
       if (!item) { const missing = new Error('record not found'); missing.statusCode = 404; throw missing; }
