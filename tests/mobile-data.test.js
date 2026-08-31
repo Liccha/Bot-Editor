@@ -173,9 +173,13 @@ test('external editor mutations do not rewrite or globally lock the editor regis
   assert.equal(enrolled.status, 201);
   const store = getStore();
   const writes = [];
+  const usageWriteOptions = [];
   const originalPut = store.put.bind(store);
   store.put = async (key, ...args) => {
     writes.push(key);
+    if (key.startsWith(`security/library-editor-usage/${enrolled.body.id}/`)) {
+      usageWriteOptions.push(args[1] || {});
+    }
     return originalPut(key, ...args);
   };
   try {
@@ -189,8 +193,12 @@ test('external editor mutations do not rewrite or globally lock the editor regis
   }
   assert.ok(!writes.includes('security/library-editors.json'), 'every edit rewrote the global editor registry');
   assert.ok(!writes.includes('locks/library-editors.json'), 'unrelated editors still share one mutation lock');
+  assert.ok(writes.some(key => key.startsWith(`locks/library-editor-usage-${enrolled.body.id}-`)),
+    'the mutation counter is not isolated to this editor');
   assert.ok(writes.some(key => key.startsWith(`security/library-editor-usage/${enrolled.body.id}/`)),
     'the lightweight per-editor mutation guard was not recorded');
+  assert.ok(usageWriteOptions.every(options => !options.ifMatch && !options.ifNoneMatch),
+    'OSS does not implement conditional headers on ordinary PUT requests');
 });
 
 test('revocation and emergency write lock apply to direct cloud data', async () => {

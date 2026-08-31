@@ -87,10 +87,11 @@ async function assertMutationAllowed(editor) {
   if (!editor?.id) throw error(401, 'not authorized');
   const day = now().slice(0, 10);
   const key = `security/library-editor-usage/${editor.id}/${day}.json`;
-  const store = getStore();
-  // Usage accounting is a small per-editor compare-and-swap. It must never
-  // serialize every installation behind the global editor registry lock.
-  for (let attempt = 0; attempt < 4; attempt++) {
+  // Alibaba OSS rejects If-Match / If-None-Match on ordinary PUT requests.
+  // Serialize only this editor's tiny counter instead; unrelated installations
+  // never share this lock and the actual library mutation remains independent.
+  return repo.withLock(`library-editor-usage-${editor.id}-${day}`, async () => {
+    const store = getStore();
     const current = await store.get(key);
     let count = 0;
     if (current) {
@@ -98,19 +99,9 @@ async function assertMutationAllowed(editor) {
       count = Math.max(0, Number(value?.count || 0));
     }
     if (count >= DAILY_MUTATION_LIMIT) throw error(429, 'daily mutation limit reached');
-    try {
-      await store.put(key, Buffer.from(JSON.stringify({ schema: 1, editorId: editor.id,
-        day, count: count + 1, updatedAt: now() })), current ? { ifMatch: current.etag } : { ifNoneMatch: true });
-      return;
-    } catch (writeError) {
-      const conflict = ['PreconditionFailed', 'FileAlreadyExists', 'ObjectAlreadyExists']
-        .includes(String(writeError?.code || '')) || Number(writeError?.status || writeError?.statusCode || 0) === 409;
-      if (!conflict) throw writeError;
-    }
-  }
-  const busy = error(503, 'editor usage is busy');
-  busy.publicCode = 'write_busy';
-  throw busy;
+    await store.put(key, Buffer.from(JSON.stringify({ schema: 1, editorId: editor.id,
+      day, count: count + 1, updatedAt: now() })));
+  });
 }
 
 module.exports = { EDITORS_KEY, assertMutationAllowed, editorFromRequest, enroll, hashSecret, readEditors };
