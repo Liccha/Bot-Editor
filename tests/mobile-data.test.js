@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'songbot-mobile-data-test-'));
 process.env.ANNOUNCEMENT_STORAGE = 'local';
@@ -18,6 +19,7 @@ process.env.ANNOUNCEMENT_HIDDEN_GROUP_ID = 'mobile-data-group';
 const relay = require('../api/mobile-relay');
 const data = require('../api/mobile-data');
 const { getStore } = require('../api/_lib/storage');
+const repo = require('../api/_lib/repository');
 const desktop = { authorization: 'Desktop mobile-data-desktop-token' };
 
 function call(handler, method, action, { body, headers = {}, query = {} } = {}) {
@@ -33,10 +35,10 @@ function call(handler, method, action, { body, headers = {}, query = {} } = {}) 
 
 test('paired device reads and edits cloud data with no desktop poll', async () => {
   const songs = await call(data, 'POST', 'bootstrap-songs', { headers: desktop, body: {
-    columns: ['id', 'song_name', 'author', '4k_ez', 'album_image_path', 'image_path', 'audio_path'],
+    columns: ['id', 'song_name', 'author', '4k_ez', 'album_ids', 'album_image_path', 'image_path', 'audio_path'],
     items: [
-      { id: '1', song_name: '第一首', author: 'A', '4k_ez': '1-100' },
-      { id: '3', song_name: '第三首', author: 'B', '4k_ez': '0-0' }
+      { id: '1', song_name: '第一首', author: 'A', '4k_ez': '1-100', album_ids: '100' },
+      { id: '3', song_name: '第三首', author: 'B', '4k_ez': '0-0', album_ids: '200' }
     ]
   } });
   assert.equal(songs.status, 201);
@@ -71,6 +73,124 @@ test('paired device reads and edits cloud data with no desktop poll', async () =
   assert.equal(after.body.items[0].id, '3');
   assert.equal(after.body.items[0].song_name, '离线电脑也能修改');
   assert.equal((await call(data, 'GET', 'status', { headers })).body.cloudIndependent, true);
+});
+
+test('album_ids updates are visible through the exact song endpoint', async () => {
+  const updated = await call(data, 'POST', 'song', {
+    headers: desktop,
+    body: { id: '3', values: { album_ids: '209' } }
+  });
+  assert.equal(updated.status, 200);
+  const exact = await call(data, 'GET', 'song-item', {
+    headers: desktop,
+    query: { id: '3' }
+  });
+  assert.equal(exact.status, 200);
+  assert.equal(exact.body.id, '3');
+  assert.equal(exact.body.album_ids, '209');
+});
+
+test('a contended song write reports write_busy instead of pretending data is uninitialized', async () => {
+  let release;
+  const held = repo.withLock('mobile-library-songs', () => new Promise(resolve => { release = resolve; }));
+  const store = getStore();
+  for (let attempt = 0; attempt < 50 && !await store.get('locks/mobile-library-songs.json'); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 2));
+  }
+  const originalSetTimeout = global.setTimeout;
+  global.setTimeout = (callback, delay, ...args) => originalSetTimeout(callback, Math.min(Number(delay) || 0, 1), ...args);
+  let response;
+  try {
+    response = await call(data, 'POST', 'song', {
+      headers: desktop,
+      body: { id: '3', values: { album_ids: '210' } }
+    });
+  } finally {
+    global.setTimeout = originalSetTimeout;
+    release();
+    await held;
+  }
+  assert.equal(response.status, 503);
+  assert.equal(response.body.code, 'write_busy');
+  assert.equal(response.body.error, 'cloud data busy');
+});
+
+test('ordinary updates write only the compact snapshot and preserve the legacy raw fallback', async () => {
+  const store = getStore();
+  const rawKey = 'mobile-library/songs/current.json';
+  const compactKey = 'mobile-library/songs/current.json.gz';
+  const rawBefore = await store.get(rawKey);
+  const writes = [];
+  const originalPut = store.put.bind(store);
+  store.put = async (key, ...args) => {
+    writes.push(key);
+    return originalPut(key, ...args);
+  };
+  try {
+    const response = await call(data, 'POST', 'song', {
+      headers: desktop,
+      body: { id: '3', values: { album_ids: '210' } }
+    });
+    assert.equal(response.status, 200);
+  } finally {
+    store.put = originalPut;
+  }
+  const rawAfter = await store.get(rawKey);
+  assert.deepEqual(rawAfter.body, rawBefore.body, 'an ordinary field edit rewrote the 1 MB legacy snapshot');
+  assert.ok(writes.includes(compactKey), 'the authoritative compact snapshot was not written');
+  assert.ok(!writes.includes(rawKey), 'the legacy raw snapshot must not be uploaded on every edit');
+  assert.ok(!writes.some(key => key.startsWith('audit/')),
+    'a committed library edit must not fail later on a duplicate audit upload');
+});
+
+test('status repairs a revision marker left behind by a completed compact snapshot write', async () => {
+  const store = getStore();
+  const compact = await store.get('mobile-library/songs/current.json.gz');
+  const document = JSON.parse(zlib.gunzipSync(compact.body).toString('utf8'));
+  await store.put('mobile-library/songs/revision.json', Buffer.from(JSON.stringify({
+    schema: 1,
+    dataset: 'songs',
+    revision: Math.max(0, Number(document.revision || 0) - 1),
+    updatedAt: '2000-01-01T00:00:00.000Z',
+    total: document.items.length,
+    snapshotEtag: 'stale-etag'
+  })));
+  const response = await call(data, 'GET', 'status', { headers: desktop });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.songs.revision, document.revision);
+  const repaired = JSON.parse((await store.get('mobile-library/songs/revision.json')).body.toString('utf8'));
+  assert.equal(repaired.revision, document.revision);
+  assert.equal(repaired.snapshotEtag, compact.etag);
+});
+
+test('external editor mutations do not rewrite or globally lock the editor registry', async () => {
+  const installationId = crypto.randomUUID();
+  const secret = crypto.randomBytes(32).toString('base64url');
+  const enrolled = await call(data, 'POST', 'enroll-editor', {
+    headers: { 'x-vercel-forwarded-for': '198.51.100.101' },
+    body: { installationId, secret, name: '独立计数编辑器' }
+  });
+  assert.equal(enrolled.status, 201);
+  const store = getStore();
+  const writes = [];
+  const originalPut = store.put.bind(store);
+  store.put = async (key, ...args) => {
+    writes.push(key);
+    return originalPut(key, ...args);
+  };
+  try {
+    const updated = await call(data, 'POST', 'song', {
+      headers: { authorization: `Device ${enrolled.body.token}` },
+      body: { id: '3', values: { album_ids: '211' } }
+    });
+    assert.equal(updated.status, 200);
+  } finally {
+    store.put = originalPut;
+  }
+  assert.ok(!writes.includes('security/library-editors.json'), 'every edit rewrote the global editor registry');
+  assert.ok(!writes.includes('locks/library-editors.json'), 'unrelated editors still share one mutation lock');
+  assert.ok(writes.some(key => key.startsWith(`security/library-editor-usage/${enrolled.body.id}/`)),
+    'the lightweight per-editor mutation guard was not recorded');
 });
 
 test('revocation and emergency write lock apply to direct cloud data', async () => {
@@ -198,8 +318,8 @@ test('self enrollment is idempotent for one installation secret and emergency lo
 test('an unchanged desktop change cursor never downloads the full library snapshot', async () => {
   const store = getStore();
   const currentKey = 'mobile-library/songs/current.json';
-  const current = await store.get(currentKey);
-  const revision = JSON.parse(current.body.toString('utf8')).revision;
+  const marker = await store.get('mobile-library/songs/revision.json');
+  const revision = JSON.parse(marker.body.toString('utf8')).revision;
   const originalGet = store.get.bind(store);
   let snapshotReads = 0;
   let snapshotBytes = 0;
@@ -264,6 +384,14 @@ test('cold library reads migrate to and prefer a compact gzip snapshot', async (
   const store = getStore();
   const rawKey = 'mobile-library/songs/current.json';
   const compactKey = 'mobile-library/songs/current.json.gz';
+  const markerKey = 'mobile-library/songs/revision.json';
+  // Recreate a genuine pre-migration layout: one current raw snapshot and a
+  // marker that predates compact-etag tracking.
+  const authoritative = await store.get(compactKey);
+  await store.put(rawKey, zlib.gunzipSync(authoritative.body));
+  const marker = JSON.parse((await store.get(markerKey)).body.toString('utf8'));
+  delete marker.snapshotEtag;
+  await store.put(markerKey, Buffer.from(JSON.stringify(marker)));
   await store.delete(compactKey);
 
   const libraryModule = require.resolve('../api/_lib/mobile-library');

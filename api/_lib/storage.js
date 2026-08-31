@@ -68,7 +68,10 @@ class LocalStore {
     await fs.copyFile(src, dst);
   }
   async head(key) {
-    try { const stat = await fs.stat(this.resolve(key)); return { size: stat.size }; }
+    try {
+      const body = await fs.readFile(this.resolve(key));
+      return { size: body.length, etag: crypto.createHash('sha256').update(body).digest('hex') };
+    }
     catch (error) { if (error.code === 'ENOENT') return null; throw error; }
   }
   async signedPutUrl(key) { return `/api/announcement-cloud?action=local-upload&key=${encodeURIComponent(key)}`; }

@@ -28,7 +28,12 @@ async function withLock(name, operation) {
       if (!acquired) await sleep(200 + Math.floor(Math.random() * 150));
     }
   }
-  if (!acquired) { const error = new Error('announcement store is busy'); error.statusCode = 503; throw error; }
+  if (!acquired) {
+    const error = new Error('cloud write is busy');
+    error.statusCode = 503;
+    error.publicCode = 'write_busy';
+    throw error;
+  }
   try {
     return await operation();
   } finally {

@@ -44,6 +44,11 @@ module.exports = async function handler(req, res) {
     if ((action === 'songs' || action === 'stable') && req.method === 'GET') {
       return json(res, 200, await library.list(action, query(req, 'q'), query(req, 'offset'), query(req, 'limit')));
     }
+    if (action === 'song-item' && req.method === 'GET') {
+      const item = await library.item('songs', query(req, 'id'));
+      if (!item) { const missing = new Error('record not found'); missing.statusCode = 404; throw missing; }
+      return json(res, 200, item);
+    }
     if (action === 'changes' && req.method === 'GET') {
       if (!desktop) throw unauthorized();
       const dataset = String(query(req, 'dataset') || '');
@@ -137,17 +142,21 @@ module.exports = async function handler(req, res) {
   } catch (error) {
     const status = Number(error.statusCode || 500);
     if (status >= 500) console.error('mobile-data', action, { name: String(error.name || 'Error'), status });
-    const conflict = String(error.publicCode || '');
-    const conflictMessage = conflict === 'record_exists' ? 'record already exists'
-      : conflict === 'dataset_initialized' ? 'already initialized'
-        : conflict === 'dataset_limit' ? 'dataset item limit reached'
-          : conflict === 'baseline_unavailable' ? 'baseline unavailable' : 'conflict';
+    const code = String(error.publicCode || '');
+    const conflictMessage = code === 'record_exists' ? 'record already exists'
+      : code === 'dataset_initialized' ? 'already initialized'
+        : code === 'dataset_limit' ? 'dataset item limit reached'
+          : code === 'baseline_unavailable' ? 'baseline unavailable' : 'conflict';
+    if (status === 503 && code === 'write_busy') res.setHeader('Retry-After', '1');
     return json(res, status >= 400 && status < 600 ? status : 500, {
       error: status === 423 ? 'cloud writes temporarily locked'
         : status === 401 || status === 403 ? 'not authorized'
           : status === 404 ? 'not found' : status === 409 ? conflictMessage
-            : status === 400 ? 'invalid request' : status === 503 ? 'cloud data not initialized' : 'internal',
-      ...(status === 409 && conflict ? { code: conflict } : {})
+            : status === 400 ? 'invalid request'
+              : status === 503 && code === 'write_busy' ? 'cloud data busy'
+                : status === 503 && code === 'dataset_not_initialized' ? 'cloud data not initialized'
+                  : status === 503 ? 'cloud storage unavailable' : 'internal',
+      ...((status === 409 || status === 503) && code ? { code } : {})
     });
   }
 };
