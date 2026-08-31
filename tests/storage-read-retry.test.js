@@ -111,3 +111,124 @@ test('OSS metadata reads use the signed native HTTP path needed by library statu
     global.fetch = originalFetch;
   }
 });
+
+test('OSS metadata writes use one signed native HTTP PUT with conditional headers', async () => {
+  const store = Object.create(OssStore.prototype);
+  let sdkAttempts = 0;
+  let httpAttempts = 0;
+  store.client = {
+    signatureUrl(key, options) {
+      assert.equal(key, 'mobile-library/songs/current.json.gz');
+      assert.equal(options.method, 'PUT');
+      assert.equal(options['x-oss-forbid-overwrite'], 'true');
+      return 'https://example.oss-cn-beijing.aliyuncs.com/mobile-library/songs/current.json.gz?signature=redacted';
+    },
+    async put() {
+      sdkAttempts += 1;
+      throw new Error('SDK PUT must not run when native HTTP is available');
+    },
+  };
+  const body = Buffer.from('compressed snapshot');
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    httpAttempts += 1;
+    assert.match(String(url), /^https:\/\/example\.oss-cn-beijing\.aliyuncs\.com\//);
+    assert.equal(options.method, 'PUT');
+    assert.equal(options.headers['x-oss-forbid-overwrite'], 'true');
+    assert.equal(options.headers['If-None-Match'], undefined);
+    assert.deepEqual(options.body, body);
+    assert.ok(options.signal, 'native write must have a bounded deadline');
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: name => name.toLowerCase() === 'etag' ? '"written-etag"' : null },
+    };
+  };
+  try {
+    assert.deepEqual(
+      await store.put('mobile-library/songs/current.json.gz', body, { forbidOverwrite: true }),
+      { etag: 'written-etag' },
+    );
+    assert.equal(sdkAttempts, 0);
+    assert.equal(httpAttempts, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('OSS lock cleanup uses signed native HTTP DELETE instead of the SDK path', async () => {
+  const store = Object.create(OssStore.prototype);
+  let sdkAttempts = 0;
+  store.client = {
+    signatureUrl(key, options) {
+      assert.equal(key, 'locks/mobile-library-songs.json');
+      assert.equal(options.method, 'DELETE');
+      return 'https://example.oss-cn-beijing.aliyuncs.com/locks/mobile-library-songs.json?signature=redacted';
+    },
+    async delete() { sdkAttempts += 1; },
+  };
+  const originalFetch = global.fetch;
+  global.fetch = async (_url, options) => {
+    assert.equal(options.method, 'DELETE');
+    assert.ok(options.signal, 'native delete must have a bounded deadline');
+    return { ok: true, status: 204, headers: { get: () => null } };
+  };
+  try {
+    await store.delete('locks/mobile-library-songs.json');
+    assert.equal(sdkAttempts, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('OSS in-bucket asset copies use one signed native copy request', async () => {
+  const store = Object.create(OssStore.prototype);
+  let sdkAttempts = 0;
+  store.client = {
+    options: { bucket: 'example-bucket' },
+    signatureUrl(key, options) {
+      assert.equal(key, 'mobile-library/assets/image/1278/cover.jpg');
+      assert.equal(options.method, 'PUT');
+      assert.equal(options['x-oss-copy-source'], '/example-bucket/mobile-library%2Fstaging%2Fcover.jpg');
+      return 'https://example.oss-cn-beijing.aliyuncs.com/mobile-library/assets/image/1278/cover.jpg?signature=redacted';
+    },
+    async copy() { sdkAttempts += 1; },
+  };
+  const originalFetch = global.fetch;
+  global.fetch = async (_url, options) => {
+    assert.equal(options.method, 'PUT');
+    assert.equal(options.headers['x-oss-copy-source'], '/example-bucket/mobile-library%2Fstaging%2Fcover.jpg');
+    assert.equal(options.body, undefined);
+    return { ok: true, status: 200, headers: { get: () => null } };
+  };
+  try {
+    await store.copy('mobile-library/staging/cover.jpg', 'mobile-library/assets/image/1278/cover.jpg');
+    assert.equal(sdkAttempts, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('OSS write transport failures become retryable service errors without SDK replay', async () => {
+  const store = Object.create(OssStore.prototype);
+  let sdkAttempts = 0;
+  store.client = {
+    signatureUrl() { return 'https://example.oss-cn-beijing.aliyuncs.com/revision.json?signature=redacted'; },
+    async put() { sdkAttempts += 1; },
+  };
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    const failure = new Error('connect ETIMEDOUT');
+    failure.code = 'ETIMEDOUT';
+    throw failure;
+  };
+  try {
+    await assert.rejects(
+      store.put('mobile-library/songs/revision.json', Buffer.from('{}')),
+      error => error.statusCode === 503 && error.publicCode === 'store_busy' && error.cause?.code === 'ETIMEDOUT',
+    );
+    assert.equal(sdkAttempts, 0, 'an uncertain write must never be replayed through the SDK');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

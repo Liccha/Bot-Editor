@@ -83,8 +83,8 @@ class OssStore {
     this.client = new OSS(options);
     // Read traffic crosses regions (Vercel Hong Kong -> OSS Beijing). Keep each
     // read attempt short enough that a single transient socket failure can be
-    // retried inside the serverless request deadline. Writes keep their normal
-    // timeout and are never replayed implicitly.
+    // retried inside the serverless request deadline. Mutations use one signed
+    // native HTTP request and are never replayed implicitly.
     this.readClient = new OSS({ ...options, timeout: Math.min(Number(options.timeout || 8_000), 3_500), retryMax: 0 });
   }
   async get(key) {
@@ -103,10 +103,15 @@ class OssStore {
     if (options.ifMatch) headers['If-Match'] = quoteEtag(options.ifMatch);
     if (options.ifNoneMatch) headers['If-None-Match'] = '*';
     if (options.forbidOverwrite) headers['x-oss-forbid-overwrite'] = 'true';
+    const native = await nativeSignedPut(this.client, key, body, headers);
+    if (native) return native;
     const result = await this.client.put(key, body, { headers });
     return { etag: cleanEtag(result.res.headers.etag) };
   }
-  async delete(key) { await this.client.delete(key); }
+  async delete(key) {
+    if (await nativeSignedDelete(this.client, key)) return;
+    await this.client.delete(key);
+  }
   async deletePrefix(prefix) {
     const normalized = String(prefix || '').replace(/\\/g, '/');
     if (!normalized || normalized.includes('..') || normalized.startsWith('/') || !normalized.endsWith('/')) {
@@ -120,7 +125,16 @@ class OssStore {
     }
     throw new Error('object prefix deletion did not converge');
   }
-  async copy(source, target) { await this.client.copy(target, source); }
+  async copy(source, target) {
+    const bucket = String(this.client?.options?.bucket || '').trim();
+    const normalized = String(source || '').replace(/^\/+/, '');
+    if (bucket && normalized && !normalized.includes('..')) {
+      const headers = { 'x-oss-copy-source': `/${bucket}/${encodeURIComponent(normalized)}` };
+      const native = await nativeSignedPut(this.client, target, undefined, headers);
+      if (native) return;
+    }
+    await this.client.copy(target, source);
+  }
   async head(key) {
     try {
       const native = await nativeSignedRequest(this.client, key, 'HEAD');
@@ -163,6 +177,75 @@ async function nativeSignedRequest(client, key, method) {
   const body = Buffer.from(await response.arrayBuffer());
   if (body.length > 32 * 1024 * 1024) throw new Error('OSS object exceeds read limit');
   return { body, etag };
+}
+
+async function nativeSignedPut(client, key, body, headers) {
+  if (!client || typeof client.signatureUrl !== 'function' || typeof fetch !== 'function') return null;
+  // signatureUrl v1 reads Content-Type and x-oss-* values from the top-level
+  // options object. Send the exact same values with the request so conditional
+  // lock/CAS semantics remain part of the OSS signature.
+  const url = client.signatureUrl(key, { method: 'PUT', expires: 60, ...headers });
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body,
+      signal: AbortSignal.timeout(8_000),
+    });
+  } catch (cause) {
+    throw mutationUnavailable(cause);
+  }
+  if (!response.ok) {
+    if ([408, 429].includes(response.status) || response.status >= 500) {
+      throw mutationUnavailable(Object.assign(new Error(`OSS HTTP ${response.status}`), { status: response.status }));
+    }
+    const error = new Error(`OSS HTTP ${response.status}`);
+    error.status = response.status;
+    error.statusCode = response.status;
+    error.code = response.status === 409 ? 'FileAlreadyExists'
+      : response.status === 412 ? 'PreconditionFailed' : 'ResponseError';
+    throw error;
+  }
+  return { etag: cleanEtag(response.headers.get('etag')) };
+}
+
+async function nativeSignedDelete(client, key) {
+  if (!client || typeof client.signatureUrl !== 'function' || typeof fetch !== 'function') return false;
+  const url = client.signatureUrl(key, { method: 'DELETE', expires: 60 });
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(8_000),
+    });
+  } catch (cause) {
+    throw mutationUnavailable(cause);
+  }
+  // OSS deletion is idempotent. Treat an already absent lock/staging object as
+  // complete instead of leaving a stale client-side failure behind.
+  if (response.status === 404) return true;
+  if (!response.ok) {
+    if ([408, 429].includes(response.status) || response.status >= 500) {
+      throw mutationUnavailable(Object.assign(new Error(`OSS HTTP ${response.status}`), { status: response.status }));
+    }
+    const error = new Error(`OSS HTTP ${response.status}`);
+    error.status = response.status;
+    error.statusCode = response.status;
+    error.code = 'ResponseError';
+    throw error;
+  }
+  return true;
+}
+
+function mutationUnavailable(cause) {
+  const error = new Error('OSS mutation transport unavailable');
+  error.status = 503;
+  error.statusCode = 503;
+  error.publicCode = 'store_busy';
+  error.code = 'StorageUnavailable';
+  error.cause = cause;
+  return error;
 }
 
 async function readWithRetry(operation) {
