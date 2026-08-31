@@ -89,6 +89,8 @@ class OssStore {
   }
   async get(key) {
     try {
+      const native = await nativeSignedRequest(this.client, key, 'GET');
+      if (native) return native;
       const result = await readWithRetry(() => (this.readClient || this.client).get(key));
       return { body: Buffer.from(result.content), etag: cleanEtag(result.res.headers.etag) };
     } catch (error) {
@@ -121,6 +123,8 @@ class OssStore {
   async copy(source, target) { await this.client.copy(target, source); }
   async head(key) {
     try {
+      const native = await nativeSignedRequest(this.client, key, 'HEAD');
+      if (native) return native;
       const result = await readWithRetry(() => (this.readClient || this.client).head(key));
       return { size: Number(result.res.headers['content-length'] || 0), etag: cleanEtag(result.res.headers.etag) };
     } catch (error) {
@@ -132,6 +136,33 @@ class OssStore {
     return this.client.signatureUrl(key, { method: 'PUT', expires: 300, 'Content-Type': contentType || 'application/octet-stream' });
   }
   async signedGetUrl(key) { return this.client.signatureUrl(key, { method: 'GET', expires: 600 }); }
+}
+
+async function nativeSignedRequest(client, key, method) {
+  if (!client || typeof client.signatureUrl !== 'function' || typeof fetch !== 'function') return null;
+  const url = client.signatureUrl(key, { method, expires: 60 });
+  let response;
+  try {
+    response = await fetch(url, { method, signal: AbortSignal.timeout(3_500) });
+  } catch (error) {
+    if (transientReadError(error)) return null;
+    throw error;
+  }
+  if (response.status === 404) {
+    const error = new Error('object not found'); error.status = 404; error.code = 'NoSuchKey'; throw error;
+  }
+  if (!response.ok) {
+    const error = new Error(`OSS HTTP ${response.status}`); error.status = response.status; error.code = 'ResponseError'; throw error;
+  }
+  const etag = cleanEtag(response.headers.get('etag'));
+  if (method === 'HEAD') {
+    return { size: Number(response.headers.get('content-length') || 0), etag };
+  }
+  const declared = Number(response.headers.get('content-length') || 0);
+  if (declared > 32 * 1024 * 1024) throw new Error('OSS object exceeds read limit');
+  const body = Buffer.from(await response.arrayBuffer());
+  if (body.length > 32 * 1024 * 1024) throw new Error('OSS object exceeds read limit');
+  return { body, etag };
 }
 
 async function readWithRetry(operation) {
@@ -152,7 +183,7 @@ function transientReadError(error) {
   if (status === 408 || status === 429 || status >= 500) return true;
   const code = String(error?.code || error?.name || '');
   return ['RequestError', 'ConnectionTimeoutError', 'SocketTimeoutError', 'ECONNRESET',
-    'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'EAI_AGAIN'].includes(code);
+    'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'EAI_AGAIN', 'TimeoutError', 'AbortError'].includes(code);
 }
 
 function cleanEtag(value) { return String(value || '').replace(/^W\//, '').replace(/^"|"$/g, ''); }
