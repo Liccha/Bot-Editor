@@ -61,7 +61,7 @@ const manifest = {
   sha256: hash,
   size,
   publishedAt: new Date().toISOString(),
-  notes: '底部导航已调整为“总览、茶韵谱面、Stable谱面、更多”；页面路由和功能保持不变。',
+  notes: '发现新版本',
 };
 
 await client.put(apkKey, apk, {
