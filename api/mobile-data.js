@@ -21,6 +21,17 @@ function body(req) {
 function query(req, key) { const value = req.query?.[key]; return Array.isArray(value) ? value[0] : value; }
 function badRequest() { const error = new Error(); error.statusCode = 400; throw error; }
 function unauthorized() { const error = new Error(); error.statusCode = 401; throw error; }
+function managedAssetKey(value) {
+  const key = String(value || '').replace(/\\/g, '/');
+  if (!key || key.includes('..')) return null;
+  const match = /^mobile-library\/assets\/(image|audio)\/([0-9]{1,12})\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.exec(key);
+  if (!match) return null;
+  const extension = match[3].slice(match[3].lastIndexOf('.')).toLowerCase();
+  const allowed = match[1] === 'image'
+    ? ['.jpg', '.jpeg', '.png', '.webp']
+    : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
+  return allowed.includes(extension) ? { key, type: match[1] } : null;
+}
 
 module.exports = async function handler(req, res) {
   const action = String(query(req, 'action') || 'status');
@@ -48,6 +59,24 @@ module.exports = async function handler(req, res) {
       const item = await library.item('songs', query(req, 'id'));
       if (!item) { const missing = new Error('record not found'); missing.statusCode = 404; throw missing; }
       return json(res, 200, item);
+    }
+    if (action === 'asset-download' && req.method === 'GET') {
+      // SongBot alone materializes managed media into its persistent local cache.
+      // Group queries continue to read local files and never contact OSS.
+      if (!desktop) throw unauthorized();
+      const asset = managedAssetKey(query(req, 'key'));
+      if (!asset) badRequest();
+      const store = getStore();
+      const head = await store.head(asset.key);
+      const maximum = asset.type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024;
+      if (!head) { const missing = new Error('asset not found'); missing.statusCode = 404; throw missing; }
+      if (!Number.isSafeInteger(head.size) || head.size < 1 || head.size > maximum) badRequest();
+      return json(res, 200, {
+        key: asset.key,
+        size: head.size,
+        etag: String(head.etag || ''),
+        url: await store.signedGetUrl(asset.key)
+      });
     }
     if (action === 'changes' && req.method === 'GET') {
       if (!desktop) throw unauthorized();
