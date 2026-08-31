@@ -16,9 +16,9 @@ process.env.ALI_OSS_ACCESS_KEY_SECRET = 'config-test-secret';
 
 const { config } = require('../api/_lib/config');
 
-test('serverless functions run near the Beijing object store', () => {
+test('serverless functions avoid the failing Hong Kong to Beijing storage route', () => {
   const vercel = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
-  assert.deepEqual(vercel.regions, ['hkg1']);
+  assert.deepEqual(vercel.regions, ['icn1']);
 });
 
 test('OSS calls use a bounded timeout instead of the SDK 60 second default', () => {
