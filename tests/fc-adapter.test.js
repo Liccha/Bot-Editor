@@ -40,7 +40,7 @@ test('FC adapter preserves the existing Vercel handler contract and trusted sour
   assert.equal(observed.body, '{"id":"1278"}');
   assert.equal(security.trustedEdgeIp(observed), '203.0.113.8');
   assert.equal(response.statusCode, 201);
-  assert.equal(response.headers['Access-Control-Allow-Origin'], 'https://editor.teacharm.moe');
+  assert.equal(response.headers['Access-Control-Allow-Origin'], undefined);
 });
 
 test('FC adapter permits only approved Editor origins during preflight', async () => {
@@ -49,7 +49,7 @@ test('FC adapter permits only approved Editor origins during preflight', async (
     requestContext: { http: { method: 'OPTIONS', path: '/api/mobile-data', sourceIp: '203.0.113.8' } },
   }));
   assert.equal(allowed.statusCode, 204);
-  assert.match(allowed.headers['Access-Control-Allow-Headers'], /Authorization/);
+  assert.deepEqual(allowed.headers, {});
 
   const denied = await handleEvent(event({
     headers: { Origin: 'https://evil.example' },

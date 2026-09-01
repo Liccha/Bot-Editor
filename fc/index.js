@@ -31,20 +31,8 @@ function allowedOrigin(value) {
   return '';
 }
 
-function corsHeaders(origin) {
-  return origin ? {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, If-Match, X-Admin-Device, X-Admin-Session, X-Like-Device, X-Visit-Device',
-    'Access-Control-Expose-Headers': 'ETag, Retry-After',
-    'Access-Control-Max-Age': '7200',
-    Vary: 'Origin',
-  } : {};
-}
-
-function responseCapture(extraHeaders) {
-  const headers = { ...extraHeaders };
+function responseCapture() {
+  const headers = {};
   let body = '';
   return {
     response: {
@@ -72,13 +60,13 @@ async function handleEvent(rawEvent, routes = ROUTES) {
   const method = String(event.requestContext?.http?.method || 'GET').toUpperCase();
   if (method === 'OPTIONS') {
     return origin
-      ? { statusCode: 204, headers: corsHeaders(origin), body: '' }
+      ? { statusCode: 204, headers: {}, body: '' }
       : { statusCode: 403, headers: {}, body: '' };
   }
 
   const path = String(event.requestContext?.http?.path || event.rawPath || '');
   const route = routes[path];
-  if (!route) return { statusCode: 404, headers: corsHeaders(origin), body: '{"error":"not found"}' };
+  if (!route) return { statusCode: 404, headers: {}, body: '{"error":"not found"}' };
 
   // FC supplies sourceIp from its trusted request context. Always overwrite the
   // similarly named incoming header so callers cannot forge an IP identity.
@@ -96,7 +84,7 @@ async function handleEvent(rawEvent, routes = ROUTES) {
     body: requestBody,
     socket: { remoteAddress: sourceIp },
   };
-  const capture = responseCapture(corsHeaders(origin));
+  const capture = responseCapture();
   await route(req, capture.response);
   return capture.result();
 }

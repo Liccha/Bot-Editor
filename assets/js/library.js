@@ -106,7 +106,7 @@ async function _fetchLibraryJson(url,timeoutMs,cacheMode){
 
 async function _resolvePrimaryLibraryUrl(){
  if(!_LIBRARY_RELEASE_POINTER)return _LIBRARY_PRIMARY_DATA;
- var state=await _fetchJsonResponse(_LIBRARY_RELEASE_POINTER,6000,'no-cache');
+ var state=await _fetchJsonResponse(_LIBRARY_RELEASE_POINTER,1800,'no-cache');
  var release=String(state&&state.release||'').trim();
  if(!/^data\/releases\/songs-[a-f0-9]{16}\.json$/.test(release))throw new Error('曲库版本指针无效');
  return new URL('/'+release,_LIBRARY_RELEASE_POINTER).toString();
@@ -118,7 +118,10 @@ async function _fetchCurrentLibrary(){
    var primary=await _resolvePrimaryLibraryUrl();
    return await _fetchLibraryJson(primary,6000,_LIBRARY_RELEASE_POINTER? 'force-cache':'no-cache');
   }catch(e){
-   if(window.console&&console.warn)console.warn('[曲库] 云端不可用，切换 GitHub 备份',e&&e.message||e);
+   if(_LIBRARY_PRIMARY_DATA){
+    try{return await _fetchLibraryJson(_LIBRARY_PRIMARY_DATA,6000,'no-cache')}
+    catch(primaryError){if(window.console&&console.warn)console.warn('[曲库] 国内主索引不可用，切换 GitHub 备份',primaryError&&primaryError.message||primaryError)}
+   }else if(window.console&&console.warn)console.warn('[曲库] 云端不可用，切换 GitHub 备份',e&&e.message||e);
   }
  }
  return _fetchLibraryJson(_LIBRARY_GITHUB_DATA,12000);
