@@ -88,6 +88,25 @@ test('desktop password grant permanently trusts only the edge-observed IP finger
   assert.match(document.fingerprints[0].fingerprint, /^[a-f0-9]{64}$/);
 });
 
+test('clean workstation unlocks through cloud password without a bundled secret file', async () => {
+  const headers = {
+    'x-admin-device': 'clean-workstation',
+    'x-vercel-forwarded-for': '203.0.113.41'
+  };
+  assert.deepEqual((await call('GET', 'workstation-admin-check', { headers })).body, { admin: false });
+  assert.deepEqual((await call('POST', 'workstation-admin-grant', {
+    headers, body: { d: 'clean-workstation', p: 'wrongpassword' }
+  })).body, { admin: false });
+  assert.deepEqual((await call('POST', 'workstation-admin-grant', {
+    headers, body: { d: 'clean-workstation', p: password }
+  })).body, { admin: true });
+  assert.deepEqual((await call('GET', 'workstation-admin-check', { headers })).body, { admin: true });
+  assert.deepEqual((await call('GET', 'workstation-admin-check', { headers: {
+    'x-admin-device': 'same-network-new-install',
+    'x-vercel-forwarded-for': '203.0.113.41'
+  } })).body, { admin: true });
+});
+
 test('Unicode attachment names survive ticketing, persistence, and legacy recovery', async () => {
   const desktopHeaders = { authorization: 'Desktop desktop-token-for-tests-only', 'x-admin-device': 'filename-test' };
   const ticket = await call('POST', 'upload-ticket', { headers: desktopHeaders, body: {
