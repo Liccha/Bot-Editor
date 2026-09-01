@@ -30,13 +30,17 @@ async function admin(req, desktop = false) {
 function browserAllowed(req, cfg) {
   if (cfg.local) return true;
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0].toLowerCase();
-  const allowedHost = host === 'editor.teacharm.moe' || host === 'bot-editor.vercel.app' || /^bot-editor-[a-z0-9-]+-licchas-projects\.vercel\.app$/.test(host);
+  const fcRuntime = process.env.SONGBOT_RUNTIME === 'aliyun-fc';
+  const allowedHost = fcRuntime || host === 'editor.teacharm.moe' || host === 'bot-editor.vercel.app' || /^bot-editor-[a-z0-9-]+-licchas-projects\.vercel\.app$/.test(host);
   if (!allowedHost) return false;
   const origin = String(req.headers.origin || '').toLowerCase();
   if (!origin) return req.method === 'GET' || String(req.headers['sec-fetch-site'] || '') === 'same-origin';
   try {
     const originHost = new URL(origin).hostname.toLowerCase();
-    return originHost === host;
+    return fcRuntime
+      ? originHost === 'editor.teacharm.moe' || originHost === 'bot-editor.vercel.app'
+        || /^bot-editor-[a-z0-9-]+-licchas-projects\.vercel\.app$/.test(originHost)
+      : originHost === host;
   } catch (_) { return false; }
 }
 function sessionCookie(token) {

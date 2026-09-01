@@ -7,6 +7,8 @@
   },
   "scripts": {
     "test": "node --test tests/*.test.js",
+    "build:fc": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-fc-package.ps1",
+    "deploy:fc": "node scripts/deploy-fc.mjs",
     "preflight:announcements": "node scripts/preflight-announcements.mjs",
     "migrate:announcements": "node scripts/migrate-announcements.mjs",
     "migrate:website": "node scripts/migrate-website-posts.mjs",
@@ -18,5 +20,9 @@
   },
   "dependencies": {
     "ali-oss": "6.23.0"
+  },
+  "devDependencies": {
+    "@alicloud/fc20230330": "4.8.2",
+    "@alicloud/openapi-core": "1.0.8"
   }
 }

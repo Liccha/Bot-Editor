@@ -4,3 +4,4 @@
 node_modules/
 migration-report*.json
 backups/
+.fc-build/
