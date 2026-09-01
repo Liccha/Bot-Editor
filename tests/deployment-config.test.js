@@ -18,7 +18,7 @@ const { config } = require('../api/_lib/config');
 
 test('serverless functions avoid the failing Hong Kong to Beijing storage route', () => {
   const vercel = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
-  assert.deepEqual(vercel.regions, ['icn1']);
+  assert.deepEqual(vercel.regions, ['hnd1']);
 });
 
 test('OSS calls use a bounded timeout instead of the SDK 60 second default', () => {
