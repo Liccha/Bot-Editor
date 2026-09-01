@@ -113,7 +113,7 @@ module.exports = async function handler(req, res) {
       if (req.method === 'POST') {
         await emergency.assertWriteAllowed();
         const result = await repo.create(body(req), auditActor, cfg.hiddenGroupId);
-        return json(res, 201, result.item, { ETag: `"${result.etag}"` });
+        return json(res, result.created === false ? 200 : 201, result.item, { ETag: `"${result.etag}"` });
       }
       if (req.method === 'PATCH' || req.method === 'PUT') {
         await emergency.assertWriteAllowed();

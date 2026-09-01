@@ -85,17 +85,13 @@ if (!fs.existsSync(envFile)) throw new Error('private env file not found');
 if (!fs.existsSync(zipFile)) throw new Error('FC package not found; run npm run build:fc first');
 
 const privateEnv = parseEnv(envFile);
-const missing = REQUIRED_ENV.filter((key) => !privateEnv[key]);
-if (missing.length) throw new Error(`private env is missing required keys: ${missing.join(', ')}`);
-
 const region = String(privateEnv.ALI_OSS_REGION).replace(/^oss-/, '');
+if (!region || !privateEnv.ALI_OSS_ACCESS_KEY_ID || !privateEnv.ALI_OSS_ACCESS_KEY_SECRET) {
+  throw new Error('private env is missing the Function Compute deployment credentials');
+}
 const functionName = String(args.function || 'songbot-domestic-api');
 const triggerName = String(args.trigger || 'songbot-domestic-http');
 const code = new InputCodeLocation({ zipFile: fs.readFileSync(zipFile).toString('base64') });
-const environmentVariables = Object.fromEntries(REQUIRED_ENV.map((key) => [key, privateEnv[key]]));
-environmentVariables.ANNOUNCEMENT_STORAGE = 'oss';
-environmentVariables.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK = privateEnv.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK || '';
-environmentVariables.SONGBOT_RUNTIME = 'aliyun-fc';
 
 const client = new FC(new $OpenApiUtil.Config({
   accessKeyId: privateEnv.ALI_OSS_ACCESS_KEY_ID,
@@ -105,6 +101,26 @@ const client = new FC(new $OpenApiUtil.Config({
   connectTimeout: 5000,
   readTimeout: 30000,
 }));
+
+let exists = true;
+let existingFunction = null;
+try {
+  existingFunction = (await client.getFunction(functionName, new GetFunctionRequest({ qualifier: 'LATEST' }))).body;
+} catch (error) {
+  if (!isNotFound(error)) throw error;
+  exists = false;
+}
+const existingEnvironment = existingFunction?.environmentVariables || {};
+const environmentVariables = {
+  ...existingEnvironment,
+  ...Object.fromEntries(REQUIRED_ENV.map(key => [key, privateEnv[key] || existingEnvironment[key]])),
+};
+const missing = REQUIRED_ENV.filter(key => !environmentVariables[key]);
+if (missing.length) throw new Error(`private env and deployed function are missing required keys: ${missing.join(', ')}`);
+environmentVariables.ANNOUNCEMENT_STORAGE = 'oss';
+environmentVariables.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK = Object.prototype.hasOwnProperty.call(privateEnv, 'ANNOUNCEMENT_EMERGENCY_WRITE_LOCK')
+  ? privateEnv.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK : (existingEnvironment.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK || '');
+environmentVariables.SONGBOT_RUNTIME = 'aliyun-fc';
 
 const functionInput = {
   code,
@@ -119,14 +135,6 @@ const functionInput = {
   runtime: 'nodejs20',
   timeout: 20,
 };
-
-let exists = true;
-try {
-  await client.getFunction(functionName, new GetFunctionRequest({ qualifier: 'LATEST' }));
-} catch (error) {
-  if (!isNotFound(error)) throw error;
-  exists = false;
-}
 if (exists) {
   await client.updateFunction(functionName, new UpdateFunctionRequest({ body: new UpdateFunctionInput(functionInput) }));
 } else {

@@ -140,6 +140,41 @@ test('announcement lifecycle uses per-record revisions and soft delete', async (
   assert.deepEqual(list.body, []);
 });
 
+test('concurrent duplicate creates collapse to one scheduled announcement and keep the richer attachment', async () => {
+  const desktopHeaders = { authorization: 'Desktop desktop-token-for-tests-only', 'x-admin-device': 'duplicate-create-test' };
+  const attachment = 'uploads/ann_duplicate_test/attach/00000000-0000-4000-8000-000000000001-package.mcb';
+  await getStore().put(attachment, Buffer.from('package'));
+  const base = {
+    groupId: '858973074',
+    title: '幂等公告',
+    content: '幂等公告\n同一正文',
+    time: '2026-09-01 15:00',
+    pin: 'false',
+    confirm: 'false'
+  };
+
+  const results = await Promise.all([
+    call('POST', 'announcement', { headers: desktopHeaders, body: base }),
+    call('POST', 'announcement', { headers: desktopHeaders, body: {
+      ...base,
+      attach: attachment,
+      attachmentNames: ['package.mcb']
+    } })
+  ]);
+
+  assert.deepEqual(results.map(result => result.status).sort(), [200, 201]);
+  assert.equal(results[0].body.id, results[1].body.id);
+  const list = await call('GET', 'list', { headers: desktopHeaders });
+  const matches = list.body.filter(item => item.time === base.time && item.groupId === base.groupId && item.content === base.content);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].attach, attachment);
+  assert.deepEqual(matches[0].attachmentNames, ['package.mcb']);
+  assert.equal((await call('DELETE', 'announcement', {
+    headers: desktopHeaders,
+    query: { id: matches[0].id, revision: matches[0].revision }
+  })).status, 200);
+});
+
 test('bot claim is leased and completion prevents a second send', async () => {
   const check = await call('GET', 'admin-check', { headers: { 'x-admin-device': 'legacy-device' } });
   const headers = { cookie: check.headers['set-cookie'].split(';')[0] };
