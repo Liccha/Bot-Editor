@@ -85,7 +85,7 @@ class OssStore {
     // read attempt short enough that a single transient socket failure can be
     // retried inside the serverless request deadline. Mutations use one signed
     // native HTTP request and are never replayed implicitly.
-    this.readClient = new OSS({ ...options, timeout: Math.min(Number(options.timeout || 8_000), 3_500), retryMax: 0 });
+    this.readClient = new OSS({ ...options, timeout: Math.min(Number(options.timeout || 8_000), 2_500), retryMax: 0 });
   }
   async get(key) {
     try {
@@ -157,7 +157,10 @@ async function nativeSignedRequest(client, key, method) {
   const url = client.signatureUrl(key, { method, expires: 60 });
   let response;
   try {
-    response = await fetch(url, { method, signal: AbortSignal.timeout(8_000) });
+    // Leave enough of Vercel's request budget for the independent SDK path.
+    // A dead cross-region route must fail over instead of consuming the whole
+    // serverless invocation before readWithRetry() gets a chance to run.
+    response = await fetch(url, { method, signal: AbortSignal.timeout(2_500) });
   } catch (error) {
     if (transientReadError(error)) return null;
     throw error;

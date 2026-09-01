@@ -73,6 +73,36 @@ test('OSS reads use a signed native HTTP request instead of the failing SDK path
   }
 });
 
+test('OSS read falls back to the SDK when the signed HTTP route times out', async () => {
+  const store = Object.create(OssStore.prototype);
+  let sdkAttempts = 0;
+  store.readClient = {
+    async get() {
+      sdkAttempts += 1;
+      return { content: Buffer.from('sdk snapshot'), res: { headers: { etag: '"sdk-etag"' } } };
+    },
+  };
+  store.client = {
+    signatureUrl() {
+      return 'https://example.oss-cn-beijing.aliyuncs.com/current.json.gz?signature=redacted';
+    },
+  };
+  const originalFetch = global.fetch;
+  global.fetch = async () => {
+    const error = new Error('signed route timed out');
+    error.name = 'TimeoutError';
+    throw error;
+  };
+  try {
+    const result = await store.get('mobile-library/songs/current.json.gz');
+    assert.equal(result.body.toString('utf8'), 'sdk snapshot');
+    assert.equal(result.etag, 'sdk-etag');
+    assert.equal(sdkAttempts, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('OSS metadata reads use the signed native HTTP path needed by library status', async () => {
   const store = Object.create(OssStore.prototype);
   store.readClient = {
@@ -156,7 +186,7 @@ test('OSS metadata writes use one signed native HTTP PUT with conditional header
   }
 });
 
-test('OSS native reads allow the observed cross-region latency without becoming unbounded', async () => {
+test('OSS native reads leave time for the SDK fallback inside the serverless deadline', async () => {
   const store = Object.create(OssStore.prototype);
   store.readClient = { async get() { throw new Error('native HTTP should satisfy this read'); } };
   store.client = {
@@ -177,7 +207,7 @@ test('OSS native reads allow the observed cross-region latency without becoming 
   });
   try {
     await store.get('mobile-library/songs/current.json.gz');
-    assert.equal(deadline, 8_000);
+    assert.equal(deadline, 2_500);
   } finally {
     AbortSignal.timeout = originalTimeout;
     global.fetch = originalFetch;
