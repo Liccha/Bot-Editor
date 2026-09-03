@@ -186,9 +186,11 @@ function cleanRelayRequest(input) {
     ['POST /api/action', true], ['POST /api/song-asset', true]
   ]);
   if (!allowed.has(`${method} ${path}`)) throw badRequest();
+  const actionName = String(requestBody.action || '');
   if (path === '/api/action' && !['songbot.start', 'songbot.stop', 'napcat.start', 'napcat.stop', 'update.install',
-    'daily.automation.enable', 'daily.automation.disable']
-    .includes(String(requestBody.action || ''))) throw badRequest();
+    'daily.automation.enable', 'daily.automation.disable'].includes(actionName)
+    && !(actionName.length <= 1024 && /^album\.promotion\.set:(?:[0-9]{1,9}(?:,[0-9]{1,9})*)?$/.test(actionName)))
+    throw badRequest();
   const cleanQuery = {};
   for (const key of ['q', 'offset', 'limit']) if (queryValue[key] != null) cleanQuery[key] = String(queryValue[key]).slice(0, key === 'q' ? 160 : 12);
   return { method, path, query: cleanQuery, body: requestBody };
@@ -217,6 +219,9 @@ module.exports = async function handler(req, res) {
         songBot: cleanServiceState(input.songBot),
         napCat: cleanServiceState(input.napCat),
         dailyAutomation: input.dailyAutomation === true,
+        promotedAlbumIds: Array.isArray(input.promotedAlbumIds)
+          ? input.promotedAlbumIds.map(Number).filter(value => Number.isInteger(value) && value > 0).slice(0, 100)
+          : [],
       };
       await getStore().put(PRESENCE_KEY, Buffer.from(JSON.stringify(presence)));
       return json(res, 200, { ok: true, updatedAt: presence.updatedAt });
@@ -232,6 +237,7 @@ module.exports = async function handler(req, res) {
         songBot: online ? cleanServiceState(presence?.songBot) : 'offline',
         napCat: online ? cleanServiceState(presence?.napCat) : 'offline',
         dailyAutomation: presence?.dailyAutomation === true,
+        promotedAlbumIds: Array.isArray(presence?.promotedAlbumIds) ? presence.promotedAlbumIds : [],
         updatedAt: presence?.updatedAt || null,
       });
     }

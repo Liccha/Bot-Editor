@@ -41,12 +41,12 @@ test('pairing creates a revocable hidden device account without storing its secr
   assert.equal(Object.hasOwn(listed.body.items[0], 'secretHash'), false);
 });
 
-test('desktop heartbeat provides sub-second presence and carries the daily automation switch', async () => {
+test('desktop heartbeat provides sub-second presence and carries operating settings', async () => {
   const registered = await call('POST', 'register-device', { headers: desktop, body: { name: '状态设备' } });
   const deviceHeaders = { authorization: `Device ${registered.body.token}` };
   const heartbeat = await call('POST', 'desktop-heartbeat', {
     headers: { ...desktop, 'x-admin-device': 'test-workstation' },
-    body: { songBot: 'running', napCat: 'stopped', dailyAutomation: false }
+    body: { songBot: 'running', napCat: 'stopped', dailyAutomation: false, promotedAlbumIds: [209, 208] }
   });
   assert.equal(heartbeat.status, 200);
   const started = Date.now();
@@ -57,7 +57,14 @@ test('desktop heartbeat provides sub-second presence and carries the daily autom
     songBot: presence.body.songBot,
     napCat: presence.body.napCat,
     dailyAutomation: presence.body.dailyAutomation,
-  }, { online: true, songBot: 'running', napCat: 'stopped', dailyAutomation: false });
+    promotedAlbumIds: presence.body.promotedAlbumIds,
+  }, {
+    online: true,
+    songBot: 'running',
+    napCat: 'stopped',
+    dailyAutomation: false,
+    promotedAlbumIds: [209, 208],
+  });
 
   const submitted = await call('POST', 'submit', { headers: deviceHeaders, body: {
     method: 'POST', path: '/api/action', body: { action: 'daily.automation.enable' }
@@ -66,6 +73,17 @@ test('desktop heartbeat provides sub-second presence and carries the daily autom
   const polled = await call('GET', 'desktop-poll', { headers: desktop });
   const work = polled.body.items.find(item => item.id === submitted.body.id);
   assert.ok(work, 'daily automation command should be available to the workstation');
+
+  const promotion = await call('POST', 'submit', { headers: deviceHeaders, body: {
+    method: 'POST', path: '/api/action', body: { action: 'album.promotion.set:209,208' }
+  } });
+  assert.equal(promotion.status, 202);
+  const promotionPoll = await call('GET', 'desktop-poll', { headers: desktop });
+  const promotionWork = promotionPoll.body.items.find(item => item.id === promotion.body.id);
+  assert.ok(promotionWork, 'album promotion command should be available to the workstation');
+  assert.equal((await call('POST', 'desktop-complete', { headers: desktop, body: {
+    id: promotionWork.id, claimToken: promotionWork.claimToken, status: 200, body: { ok: true }
+  } })).status, 200);
   assert.equal((await call('POST', 'desktop-complete', { headers: desktop, body: {
     id: work.id, claimToken: work.claimToken, status: 200, body: { ok: true }
   } })).status, 200);
