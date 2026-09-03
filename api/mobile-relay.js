@@ -282,10 +282,11 @@ module.exports = async function handler(req, res) {
     if (action === 'asset-ticket' && req.method === 'POST') {
       const device = await deviceFromRequest(req); if (!device) throw unauthorized();
       await emergency.assertWriteAllowed();
-      const input = body(req); const type = input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
-      const size = Number(input.size || 0); const limit = type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024;
+      const input = body(req); const type = input.type === 'album-image' ? 'album-image'
+        : input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
+      const size = Number(input.size || 0); const limit = type === 'audio' ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
       const extension = String(input.extension || '').toLowerCase();
-      const allowedExtensions = type === 'image' ? ['.jpg', '.jpeg', '.png', '.webp'] : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
+      const allowedExtensions = type !== 'audio' ? ['.jpg', '.jpeg', '.png', '.webp'] : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
       if (!type || !Number.isSafeInteger(size) || size < 1 || size > limit || !allowedExtensions.includes(extension)) throw badRequest();
       await repo.withLock('mobile-devices', async () => {
         const document = await readDevices(); const stored = document.devices.find(item => item.id === device.id && item.status !== 'revoked');

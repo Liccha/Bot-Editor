@@ -318,6 +318,15 @@ test('self-enrolled workstation editor can edit library data but cannot use the 
   const partialList = await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } });
   assert.equal(partialList.body.items[0].image_path,
     'cloud-object:mobile-library/assets/image/1273/partial.webp', 'asset pointer was not committed deterministically');
+  const albumUpload = `mobile-library/uploads/${enrolled.body.id}/album.png`;
+  await getStore().put(albumUpload, Buffer.from('album-cover'));
+  const albumAsset = await call(data, 'POST', 'song-asset', {
+    headers, body: { id: '1273', type: 'album-image', key: albumUpload }
+  });
+  assert.equal(albumAsset.status, 200);
+  const albumList = await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } });
+  assert.equal(albumList.body.items[0].album_image_path,
+    'cloud-object:mobile-library/assets/album-image/1273/album.png');
   const resumed = await call(data, 'POST', 'song-create', {
     headers,
     body: { id: '1273', values: { song_name: '云端新歌', author: '新作者', '4k_ez': '3-100',
@@ -340,6 +349,7 @@ test('self-enrolled workstation editor can edit library data but cannot use the 
   await getStore().put('mobile-library/assets/image/1273/old.webp', Buffer.from('old-cover'));
   await getStore().put('mobile-library/assets/image/1273/current.webp', Buffer.from('current-cover'));
   await getStore().put('mobile-library/assets/audio/1273/current.mp3', Buffer.from('current-audio'));
+  await getStore().put('mobile-library/assets/album-image/1273/current.png', Buffer.from('album-cover'));
   const removed = await call(data, 'POST', 'song-delete', { headers, body: { id: '1273' } });
   assert.equal(removed.status, 200);
   assert.equal(removed.body.deleted, true);
@@ -349,6 +359,8 @@ test('self-enrolled workstation editor can edit library data but cannot use the 
     'deleting a song left its current cloud cover behind');
   assert.equal(await getStore().get('mobile-library/assets/audio/1273/current.mp3'), null,
     'deleting a song left its cloud audio behind');
+  assert.equal(await getStore().get('mobile-library/assets/album-image/1273/current.png'), null,
+    'deleting a song left its album cover behind');
   assert.equal((await call(data, 'GET', 'songs', { headers, query: { q: '1273', limit: '200' } })).body.total, 0,
     'deleted song ID remained occupied');
   assert.equal((await call(data, 'POST', 'song-create', {

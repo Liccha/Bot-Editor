@@ -24,10 +24,10 @@ function unauthorized() { const error = new Error(); error.statusCode = 401; thr
 function managedAssetKey(value) {
   const key = String(value || '').replace(/\\/g, '/');
   if (!key || key.includes('..')) return null;
-  const match = /^mobile-library\/assets\/(image|audio)\/([0-9]{1,12})\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.exec(key);
+  const match = /^mobile-library\/assets\/(album-image|image|audio)\/([0-9]{1,12})\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/.exec(key);
   if (!match) return null;
   const extension = match[3].slice(match[3].lastIndexOf('.')).toLowerCase();
-  const allowed = match[1] === 'image'
+  const allowed = match[1] !== 'audio'
     ? ['.jpg', '.jpeg', '.png', '.webp']
     : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
   return allowed.includes(extension) ? { key, type: match[1] } : null;
@@ -112,6 +112,7 @@ module.exports = async function handler(req, res) {
       const result = await library.remove('songs', id, actor);
       const store = getStore();
       await Promise.all([
+        store.deletePrefix(`mobile-library/assets/album-image/${id}/`),
         store.deletePrefix(`mobile-library/assets/image/${id}/`),
         store.deletePrefix(`mobile-library/assets/audio/${id}/`)
       ]);
@@ -127,11 +128,12 @@ module.exports = async function handler(req, res) {
       await emergency.assertWriteAllowed();
       if (editor) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
-      const type = input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
+      const type = input.type === 'album-image' ? 'album-image'
+        : input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
       const size = Number(input.size || 0);
-      const limit = type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024;
+      const limit = type === 'audio' ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
       const extension = String(input.extension || '').toLowerCase();
-      const allowed = type === 'image' ? ['.jpg', '.jpeg', '.png', '.webp'] : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
+      const allowed = type !== 'audio' ? ['.jpg', '.jpeg', '.png', '.webp'] : ['.mp3', '.wav', '.flac', '.m4a', '.ogg'];
       const uploader = device || editor;
       if (!uploader || !type || !Number.isSafeInteger(size) || size < 1 || size > limit || !allowed.includes(extension)) badRequest();
       const key = `mobile-library/uploads/${uploader.id}/${require('node:crypto').randomUUID()}${extension}`;
@@ -144,15 +146,16 @@ module.exports = async function handler(req, res) {
       if (!uploader) throw unauthorized();
       const input = body(req);
       const id = String(input.id || '').trim();
-      const type = input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
+      const type = input.type === 'album-image' ? 'album-image'
+        : input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
       const source = String(input.key || '');
       if (!/^[0-9]{1,12}$/.test(id) || !type || !source.startsWith(`mobile-library/uploads/${uploader.id}/`)) badRequest();
       const extension = source.slice(source.lastIndexOf('.')).toLowerCase();
-      if (type === 'image' ? !['.jpg', '.jpeg', '.png', '.webp'].includes(extension)
+      if (type !== 'audio' ? !['.jpg', '.jpeg', '.png', '.webp'].includes(extension)
         : !['.mp3', '.wav', '.flac', '.m4a', '.ogg'].includes(extension)) badRequest();
       const fileName = source.slice(source.lastIndexOf('/') + 1);
       const target = `mobile-library/assets/${type}/${id}/${fileName}`;
-      const field = type === 'image' ? 'image_path' : 'audio_path';
+      const field = type === 'album-image' ? 'album_image_path' : type === 'image' ? 'image_path' : 'audio_path';
       const pointer = `cloud-object:${target}`;
       const current = await library.item('songs', id);
       if (current && String(current[field] || '') === pointer) {
@@ -160,7 +163,7 @@ module.exports = async function handler(req, res) {
         return json(res, 200, { ok: true, stored: true, replayed: true });
       }
       const head = await getStore().head(source);
-      if (!head || head.size < 1 || head.size > (type === 'image' ? 20 * 1024 * 1024 : 100 * 1024 * 1024)) badRequest();
+      if (!head || head.size < 1 || head.size > (type === 'audio' ? 100 * 1024 * 1024 : 20 * 1024 * 1024)) badRequest();
       await getStore().copy(source, target);
       const result = await library.update('songs', id, { [field]: pointer }, actor, { managedAssets: true });
       await getStore().delete(source).catch(() => {});
