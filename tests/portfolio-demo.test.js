@@ -61,6 +61,10 @@ test('portfolio demo storage is isolated and the owner can revoke every write', 
     columns: ['id', 'song_name', 'author'], items: [{ id: '1', song_name: 'seed', author: 'demo' }],
   }, desktop));
   assert.equal(seeded.statusCode, 201);
+  const openStatus = await handleEvent(event('GET', '/api/mobile-data', { action: 'status' }, null, `Device ${demoToken}`));
+  assert.equal(openStatus.statusCode, 200);
+  assert.equal(JSON.parse(openStatus.body).demo, true);
+  assert.equal(JSON.parse(openStatus.body).writeLocked, false);
   const created = await handleEvent(event('POST', '/api/mobile-data', { action: 'song-create' }, {
     id: '2', values: { song_name: 'created', author: 'visitor' },
   }, `Device ${demoToken}`));
@@ -73,6 +77,9 @@ test('portfolio demo storage is isolated and the owner can revoke every write', 
   const disabled = await handleEvent(event('POST', '/api/demo-access', {}, { enabled: false }, 'Desktop demo-owner'));
   assert.equal(disabled.statusCode, 200);
   assert.equal(JSON.parse(disabled.body).writeEnabled, false);
+  const closedStatus = await handleEvent(event('GET', '/api/mobile-data', { action: 'status' }, null, `Device ${demoToken}`));
+  assert.equal(closedStatus.statusCode, 200);
+  assert.equal(JSON.parse(closedStatus.body).writeLocked, true);
 
   const mutation = await handleEvent(event('POST', '/api/mobile-data', { action: 'enroll-editor' }, {
     installationId: '11111111-1111-4111-8111-111111111111',

@@ -54,7 +54,12 @@ module.exports = async function handler(req, res) {
 
     if (action === 'status' && req.method === 'GET') {
       const policy = await emergency.state();
-      return json(res, 200, { ...(await library.status()), writeLocked: policy.locked });
+      const demo = await demoAccess.state();
+      return json(res, 200, {
+        ...(await library.status()),
+        writeLocked: policy.locked || (demo.demo && !demo.writeEnabled),
+        ...(demo.demo ? { demo: true, demoExpiresAt: demo.expiresAt } : {})
+      });
     }
     if ((action === 'songs' || action === 'stable') && req.method === 'GET') {
       return json(res, 200, await library.list(action, query(req, 'q'), query(req, 'offset'), query(req, 'limit')));
