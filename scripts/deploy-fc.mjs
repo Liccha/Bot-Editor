@@ -91,6 +91,10 @@ if (!region || !privateEnv.ALI_OSS_ACCESS_KEY_ID || !privateEnv.ALI_OSS_ACCESS_K
 }
 const functionName = String(args.function || 'songbot-domestic-api');
 const triggerName = String(args.trigger || 'songbot-domestic-http');
+const demoMode = args.demo === '1';
+if (demoMode && !/^songbot-portfolio-demo(?:-|$)/.test(functionName)) {
+  throw new Error('demo mode requires a dedicated songbot-portfolio-demo function');
+}
 const code = new InputCodeLocation({ zipFile: fs.readFileSync(zipFile).toString('base64') });
 
 const client = new FC(new $OpenApiUtil.Config({
@@ -111,6 +115,9 @@ try {
   exists = false;
 }
 const existingEnvironment = existingFunction?.environmentVariables || {};
+if (!demoMode && existingEnvironment.PORTFOLIO_DEMO_MODE === '1') {
+  throw new Error('refusing to redeploy a demo function without --demo 1');
+}
 const environmentVariables = {
   ...existingEnvironment,
   ...Object.fromEntries(REQUIRED_ENV.map(key => [key, privateEnv[key] || existingEnvironment[key]])),
@@ -121,10 +128,18 @@ environmentVariables.ANNOUNCEMENT_STORAGE = 'oss';
 environmentVariables.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK = Object.prototype.hasOwnProperty.call(privateEnv, 'ANNOUNCEMENT_EMERGENCY_WRITE_LOCK')
   ? privateEnv.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK : (existingEnvironment.ANNOUNCEMENT_EMERGENCY_WRITE_LOCK || '');
 environmentVariables.SONGBOT_RUNTIME = 'aliyun-fc';
+if (demoMode) {
+  environmentVariables.PORTFOLIO_DEMO_MODE = '1';
+  environmentVariables.PORTFOLIO_DEMO_EXPIRES_AT = String(args.expires || '').trim();
+  environmentVariables.ANNOUNCEMENT_OBJECT_PREFIX = 'portfolio-demo/v1/';
+  if (!environmentVariables.PORTFOLIO_DEMO_EXPIRES_AT) {
+    throw new Error('demo mode requires --expires <ISO date>');
+  }
+}
 
 const functionInput = {
   code,
-  description: 'SongBot domestic data API',
+  description: demoMode ? 'Bot Workstation isolated portfolio demo API' : 'SongBot domestic data API',
   environmentVariables,
   handler: 'fc-entry.handler',
   instanceConcurrency: 20,

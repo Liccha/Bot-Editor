@@ -12,10 +12,21 @@ function boundedNumber(name, fallback, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, Math.round(value)));
 }
 
+function objectPrefix() {
+  const value = String(process.env.ANNOUNCEMENT_OBJECT_PREFIX || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!value) return '';
+  const normalized = value.endsWith('/') ? value : `${value}/`;
+  if (normalized.includes('..') || !/^[A-Za-z0-9._/-]+$/.test(normalized)) {
+    throw new Error('Invalid ANNOUNCEMENT_OBJECT_PREFIX');
+  }
+  return normalized;
+}
+
 function config() {
   const local = process.env.ANNOUNCEMENT_STORAGE === 'local';
   return {
     local,
+    objectPrefix: objectPrefix(),
     localDir: process.env.ANNOUNCEMENT_LOCAL_DIR || path.join(process.cwd(), '.announcement-local'),
     oss: local ? null : {
       region: required('ALI_OSS_REGION'),

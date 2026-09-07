@@ -8,6 +8,7 @@ const ADMIN_IPS_KEY = 'security/admin-ips.json';
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 async function withLock(name, operation) {
+  if (process.env.PORTFOLIO_DEMO_MODE === '1') return operation();
   const store = getStore();
   const key = `locks/${name}.json`;
   const token = crypto.randomUUID();

@@ -152,6 +152,23 @@ class OssStore {
   async signedGetUrl(key) { return this.client.signatureUrl(key, { method: 'GET', expires: 600 }); }
 }
 
+class PrefixedStore {
+  constructor(store, prefix) { this.store = store; this.prefix = prefix; }
+  key(value) { return this.prefix + String(value || '').replace(/^\/+/, ''); }
+  get(key) { return this.store.get(this.key(key)); }
+  put(key, body, options) {
+    // ponytail: the temporary isolated demo accepts last-write-wins; restore
+    // conditional writes only if real concurrent usage justifies a test backend.
+    return this.store.put(this.key(key), body, process.env.PORTFOLIO_DEMO_MODE === '1' ? {} : options);
+  }
+  delete(key) { return this.store.delete(this.key(key)); }
+  deletePrefix(prefix) { return this.store.deletePrefix(this.key(prefix)); }
+  copy(source, target) { return this.store.copy(this.key(source), this.key(target)); }
+  head(key) { return this.store.head(this.key(key)); }
+  signedPutUrl(key, contentType) { return this.store.signedPutUrl(this.key(key), contentType); }
+  signedGetUrl(key) { return this.store.signedGetUrl(this.key(key)); }
+}
+
 async function nativeSignedRequest(client, key, method) {
   if (!client || typeof client.signatureUrl !== 'function' || typeof fetch !== 'function') return null;
   const url = client.signatureUrl(key, { method, expires: 60 });
@@ -278,8 +295,9 @@ let singleton;
 function getStore() {
   if (singleton) return singleton;
   const cfg = config();
-  singleton = cfg.local ? new LocalStore(cfg.localDir) : new OssStore(cfg.oss);
+  const base = cfg.local ? new LocalStore(cfg.localDir) : new OssStore(cfg.oss);
+  singleton = cfg.objectPrefix ? new PrefixedStore(base, cfg.objectPrefix) : base;
   return singleton;
 }
 
-module.exports = { LocalStore, OssStore, getStore, cleanEtag, quoteEtag };
+module.exports = { LocalStore, OssStore, PrefixedStore, getStore, cleanEtag, quoteEtag };

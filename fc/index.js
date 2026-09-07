@@ -7,6 +7,7 @@ const ROUTES = {
   '/api/meta': require('../api/meta'),
   '/api/like': require('../api/like'),
   '/api/visit': require('../api/visit'),
+  '/api/demo-access': require('../api/demo-access'),
 };
 
 const ALLOWED_ORIGINS = new Set([
@@ -65,6 +66,10 @@ async function handleEvent(rawEvent, routes = ROUTES) {
   }
 
   const path = String(event.requestContext?.http?.path || event.rawPath || '');
+  if (process.env.PORTFOLIO_DEMO_MODE === '1'
+      && path !== '/api/mobile-data' && path !== '/api/demo-access') {
+    return { statusCode: 404, headers: {}, body: '{"error":"not found"}' };
+  }
   const route = routes[path];
   if (!route) return { statusCode: 404, headers: {}, body: '{"error":"not found"}' };
 

@@ -4,6 +4,8 @@ const emergency = require('./_lib/emergency-lock');
 const mobileAuth = require('./_lib/mobile-auth');
 const editorAuth = require('./_lib/library-editor-auth');
 const library = require('./_lib/mobile-library');
+const demoAccess = require('./_lib/demo-access');
+const demoAuth = require('./_lib/demo-auth');
 
 function json(res, status, value) {
   res.statusCode = status;
@@ -36,13 +38,15 @@ function managedAssetKey(value) {
 module.exports = async function handler(req, res) {
   const action = String(query(req, 'action') || 'status');
   try {
+    await demoAccess.assertMutationAllowed(req);
     if (action === 'enroll-editor' && req.method === 'POST') {
       await emergency.assertWriteAllowed();
-      return json(res, 201, await editorAuth.enroll(req, body(req)));
+      return json(res, 201, demoAccess.demoMode() ? demoAuth.enroll(body(req)) : await editorAuth.enroll(req, body(req)));
     }
     const desktop = security.desktopAuthorized(req);
     const device = desktop ? null : await mobileAuth.deviceFromRequest(req);
-    const editor = desktop || device ? null : await editorAuth.editorFromRequest(req);
+    const editor = desktop || device ? null : demoAccess.demoMode()
+      ? demoAuth.editorFromRequest(req) : await editorAuth.editorFromRequest(req);
     if (!desktop && !device && !editor) throw unauthorized();
     const actor = desktop ? { kind: 'workstation' }
       : device ? { kind: 'mobile-device', id: device.id }
@@ -90,7 +94,7 @@ module.exports = async function handler(req, res) {
     }
     if ((action === 'song' || action === 'stable') && req.method === 'POST') {
       await emergency.assertWriteAllowed();
-      if (editor) await editorAuth.assertMutationAllowed(editor);
+      if (editor && !demoAccess.demoMode()) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
       const dataset = action === 'song' ? 'songs' : 'stable';
       const id = action === 'song' ? input.id : input.sid;
@@ -98,24 +102,26 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'song-create' && req.method === 'POST') {
       await emergency.assertWriteAllowed();
-      if (editor) await editorAuth.assertMutationAllowed(editor);
+      if (editor && !demoAccess.demoMode()) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
       const result = await library.create('songs', input.id, input.values, actor);
       return json(res, result.created === false ? 200 : 201, result);
     }
     if (action === 'song-delete' && req.method === 'POST') {
       await emergency.assertWriteAllowed();
-      if (editor) await editorAuth.assertMutationAllowed(editor);
+      if (editor && !demoAccess.demoMode()) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
       const id = String(input.id || '').trim();
       if (!/^[0-9]{1,12}$/.test(id)) badRequest();
       const result = await library.remove('songs', id, actor);
-      const store = getStore();
-      await Promise.all([
-        store.deletePrefix(`mobile-library/assets/album-image/${id}/`),
-        store.deletePrefix(`mobile-library/assets/image/${id}/`),
-        store.deletePrefix(`mobile-library/assets/audio/${id}/`)
-      ]);
+      if (!demoAccess.demoMode()) {
+        const store = getStore();
+        await Promise.all([
+          store.deletePrefix(`mobile-library/assets/album-image/${id}/`),
+          store.deletePrefix(`mobile-library/assets/image/${id}/`),
+          store.deletePrefix(`mobile-library/assets/audio/${id}/`)
+        ]);
+      }
       return json(res, 200, result);
     }
     if ((action === 'bootstrap-songs' || action === 'bootstrap-stable') && req.method === 'POST') {
@@ -126,7 +132,7 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'asset-ticket' && req.method === 'POST') {
       await emergency.assertWriteAllowed();
-      if (editor) await editorAuth.assertMutationAllowed(editor);
+      if (editor && !demoAccess.demoMode()) await editorAuth.assertMutationAllowed(editor);
       const input = body(req);
       const type = input.type === 'album-image' ? 'album-image'
         : input.type === 'image' ? 'image' : input.type === 'audio' ? 'audio' : '';
@@ -177,7 +183,9 @@ module.exports = async function handler(req, res) {
     return json(res, 405, { error: 'unsupported action or method' });
   } catch (error) {
     const status = Number(error.statusCode || 500);
-    if (status >= 500) console.error('mobile-data', action, { name: String(error.name || 'Error'), status });
+    if (status >= 500 || demoAccess.demoMode()) console.error('mobile-data', action, {
+      name: String(error.name || 'Error'), code: String(error.code || error.publicCode || ''), status,
+    });
     const code = String(error.publicCode || '');
     const conflictMessage = code === 'record_exists' ? 'record already exists'
       : code === 'dataset_initialized' ? 'already initialized'
@@ -185,14 +193,16 @@ module.exports = async function handler(req, res) {
           : code === 'baseline_unavailable' ? 'baseline unavailable' : 'conflict';
     if (status === 503 && code === 'write_busy') res.setHeader('Retry-After', '1');
     return json(res, status >= 400 && status < 600 ? status : 500, {
-      error: status === 423 ? 'cloud writes temporarily locked'
+      error: status === 423 && code === 'demo_closed' ? 'portfolio demo writes are closed'
+        : status === 423 ? 'cloud writes temporarily locked'
         : status === 401 || status === 403 ? 'not authorized'
           : status === 404 ? 'not found' : status === 409 ? conflictMessage
             : status === 400 ? 'invalid request'
               : status === 503 && code === 'write_busy' ? 'cloud data busy'
                 : status === 503 && code === 'dataset_not_initialized' ? 'cloud data not initialized'
                   : status === 503 ? 'cloud storage unavailable' : 'internal',
-      ...((status === 409 || status === 503) && code ? { code } : {})
+      ...((status === 409 || status === 503 || demoAccess.demoMode()) && (code || error.code)
+        ? { code: String(code || error.code).slice(0, 80) } : {})
     });
   }
 };
